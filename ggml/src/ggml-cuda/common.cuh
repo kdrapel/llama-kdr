@@ -1452,6 +1452,44 @@ struct ggml_cuda_stream_context {
     }
 };
 
+// Fused recurrent-state gather for GATED_DELTA_NET: the graph evaluator records the cache and the row ids
+// here when it skips the GET_ROWS that materialises them, so the kernel reads the cache row directly.
+struct ggml_cuda_gated_delta_net_gather {
+    const float *   base       = nullptr; // cache rows [row_stride floats each]
+    const int32_t * ids        = nullptr; // per-seq row index
+    int64_t         row_stride = 0;       // in floats
+};
+
+// Owned by the evaluating context, keyed by node pointer, reset at the start of every graph evaluation.
+struct ggml_cuda_gdn_gather_context {
+    std::unordered_map<const ggml_tensor *, ggml_cuda_gated_delta_net_gather> gathers;
+
+    void reset() {
+        gathers.clear();
+    }
+
+    void set(const ggml_tensor * gdn, const ggml_cuda_gated_delta_net_gather & gather) {
+        gathers[gdn] = gather;
+    }
+
+    const ggml_cuda_gated_delta_net_gather * find(const ggml_tensor * gdn) const {
+        const auto it = gathers.find(gdn);
+        return it == gathers.end() ? nullptr : &it->second;
+    }
+};
+
+// Fused GDN conv chain: the graph evaluator records the skipped conv-state gather under its CONCAT here and marks
+// the nodes the fused launch computes. Reset at the start of every graph evaluation.
+struct ggml_cuda_gdn_conv_context {
+    std::unordered_map<const ggml_tensor *, const ggml_tensor *> gathers;
+    std::unordered_map<const ggml_tensor *, unsigned char>       done;
+
+    void reset() {
+        gathers.clear();
+        done.clear();
+    }
+};
+
 struct ggml_backend_cuda_context {
     int device;
     std::string name;
@@ -1527,6 +1565,8 @@ struct ggml_backend_cuda_context {
     }
 
     ggml_cuda_stream_context concurrent_stream_context;
+    ggml_cuda_gdn_gather_context gdn_gather_context;
+    ggml_cuda_gdn_conv_context   gdn_conv_context;
 
     ~ggml_backend_cuda_context();
 
@@ -1541,6 +1581,10 @@ struct ggml_backend_cuda_context {
     cudaStream_t stream() { return stream(device, curr_stream_no); }
 
     ggml_cuda_stream_context & stream_context() { return concurrent_stream_context; }
+
+    ggml_cuda_gdn_gather_context & gdn_gathers() { return gdn_gather_context; }
+
+    ggml_cuda_gdn_conv_context & gdn_conv() { return gdn_conv_context; }
 
     cublasHandle_t cublas_handle() {
         if (cublas_handles[device][curr_stream_no] == nullptr) {

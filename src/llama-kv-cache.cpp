@@ -3029,6 +3029,14 @@ uint32_t llama_kv_cache_context::get_n_kv() const {
     return n_kv;
 }
 
+void llama_kv_cache_context::set_reserve_size(uint32_t n_ctx) {
+    GGML_ASSERT(ubatches.empty() && n_ctx > 0);
+    n_kv = std::min<uint32_t>(n_kv, n_ctx);
+    if (n_kv_rows > 0) {
+        n_kv_rows = n_kv;
+    }
+}
+
 uint32_t llama_kv_cache_context::get_n_kv_rows() const {
     return n_kv_rows;
 }

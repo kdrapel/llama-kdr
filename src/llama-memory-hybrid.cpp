@@ -216,6 +216,10 @@ llama_memory_recurrent * llama_memory_hybrid::get_mem_recr() const {
 
 llama_memory_hybrid_context::llama_memory_hybrid_context(llama_memory_status status) : status(status) {}
 
+void llama_memory_hybrid_context::set_reserve_size(uint32_t n_ctx) {
+    ctx_attn->set_reserve_size(n_ctx);
+}
+
 llama_memory_hybrid_context::llama_memory_hybrid_context(llama_memory_hybrid * mem) :
     ctx_attn(mem->get_mem_attn()->init_full()),
     ctx_recr(mem->get_mem_recr()->init_full()),

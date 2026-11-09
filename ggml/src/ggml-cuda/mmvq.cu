@@ -505,7 +505,20 @@ static constexpr __host__ __device__ int calc_nwarps(ggml_type type, int ncols_d
                     return 1;
             }
         }
-        return 1;
+        // multi-column verify (spec decode): split K across warps like the generic table does
+        switch (ncols_dst) {
+            case 2:
+            case 3:
+            case 4:
+                return 1;
+            case 5:
+            case 6:
+            case 7:
+            case 8:
+                return 2;
+            default:
+                return 1;
+        }
     }
     if (table_id == MMVQ_PARAMETERS_RDNA3_0) {
         // RDNA3 (W7900): stricter whitelist than RDNA4.
@@ -607,6 +620,21 @@ static constexpr __host__ __device__ int calc_rows_per_block(ggml_type type, int
             case 2:
             case 3:
             case 4:
+            case 5:
+            case 6:
+            case 7:
+            case 8:
+                return 2;
+            default:
+                return 1;
+        }
+    }
+    if (table_id == MMVQ_PARAMETERS_RDNA4) {
+        switch (ncols_dst) {
+            case 2:
+            case 3:
+            case 4:
+                return 1;
             case 5:
             case 6:
             case 7:

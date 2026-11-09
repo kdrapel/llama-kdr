@@ -405,6 +405,7 @@ public:
 
     llama_memory_status  get_status() const override;
     const llama_ubatch & get_ubatch() const override;
+    void set_reserve_size(uint32_t n_ctx) override;
 
     //
     // llama_kv_cache_context specific API

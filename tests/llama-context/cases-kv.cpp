@@ -8,6 +8,7 @@
 #include "common.h"
 
 #include "../../src/llama-ext.h" // llama_model_set_attn_rot, llama_arch_from_string
+#include "../../src/llama-memory-hybrid.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -819,6 +820,58 @@ struct case_comp_padding : ctx_test {
     }
 };
 
+struct case_reserve_growth : ctx_test {
+    const char * name() const override { return "reserve_grow"; }
+
+    const char * description() const override {
+        return "speculative workspace starts smaller and grows across KV padding boundaries without changing logits";
+    }
+
+    std::string skip_reason(model_run & mr) const override {
+        return llama_model_is_hybrid(mr.model) ? "" : "requires hybrid KV and recurrent memory";
+    }
+
+    case_result run(model_run & mr) const override {
+        ctx_opts opts;
+        opts.n_ctx = 4096;
+        opts.n_batch = opts.n_ubatch = 128;
+        opts.n_seq_max = 1;
+        opts.n_rs_seq = 3;
+
+        auto ctx = mr.ctx(opts);
+        CTX_REQUIRE(ctx, "failed to create context");
+        if (dynamic_cast<llama_memory_hybrid *>(llama_get_memory(ctx.get())) == nullptr) {
+            return case_result::skip("requires the standard hybrid memory implementation");
+        }
+        auto ref = mr.ctx(opts);
+        CTX_REQUIRE(ref, "failed to create reference context");
+        CTX_REQUIRE(llama_graph_reserve(ref.get(), 128, 1, 128), "full reservation failed");
+
+        const auto compute_size = [](llama_context * value) {
+            size_t bytes = 0;
+            for (const auto & [_, data] : llama_get_memory_breakdown(value)) {
+                bytes += data.compute;
+            }
+            return bytes;
+        };
+        CTX_REQUIRE(compute_size(ctx.get()) < compute_size(ref.get()), "initial workspace was not reduced");
+        CTX_REQUIRE(llama_n_ctx(ctx.get()) == llama_n_ctx(ref.get()), "cache capacity changed");
+
+        const int n_vocab = llama_vocab_n_tokens(llama_model_get_vocab(mr.model));
+        for (llama_pos pos = 0; pos < 768; pos += 128) {
+            for (auto * current : {ctx.get(), ref.get()}) {
+                CTX_REQUIRE(decode_gen(current, n_vocab, 0, pos, pos + 127), "prefill failed");
+                CTX_REQUIRE(decode_one(current, gen_token(n_vocab, 0, pos + 127), pos + 127), "decode failed");
+            }
+            std::vector<float> logits, expected;
+            CTX_REQUIRE(get_current_logits(ctx.get(), logits) && get_current_logits(ref.get(), expected), "missing logits");
+            CTX_REQUIRE(logits.size() == expected.size(), "logit count changed");
+            CTX_REQUIRE(compare_logits(logits.data(), expected.data(), logits.size()).nmse() <= NMSE_THRESHOLD, "workspace growth changed logits");
+        }
+        return case_result::pass();
+    }
+};
+
 std::vector<ctx_test_ptr> make_kv_cases() {
     std::vector<ctx_test_ptr> cases;
 
@@ -836,6 +889,7 @@ std::vector<ctx_test_ptr> make_kv_cases() {
     cases.push_back(std::make_unique<case_state_restore_fragmented>());
     cases.push_back(std::make_unique<case_noalloc>());
     cases.push_back(std::make_unique<case_comp_padding>());
+    cases.push_back(std::make_unique<case_reserve_growth>());
 
     return cases;
 }

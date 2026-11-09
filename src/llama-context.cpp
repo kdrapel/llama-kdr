@@ -824,6 +824,10 @@ void llama_context::sched_reserve() {
         if (!mctx) {
             throw std::runtime_error("failed to initialize memory module");
         }
+        if (!model.no_alloc() && cparams.n_rs_seq > 0 && cparams.n_seq_max == 1 && !getenv("LLAMA_GRAPH_RESERVE_FULL")) {
+            // grow attention workspace with populated KV instead of retaining the full-capacity prefill reservation
+            mctx->set_reserve_size(256);
+        }
     }
 
     // avoid reserving graphs with zero outputs - assume one output per sequence

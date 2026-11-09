@@ -78,7 +78,7 @@ bool llama_memory_status_is_fail(llama_memory_status status);
 //   - llama_kv_cache_iswa_context
 //   ...
 //
-// the only method that should mutate the memory and the memory context is llama_memory_i::apply()
+// only apply() mutates live memory; set_reserve_size() is restricted to synthetic reservation contexts
 struct llama_memory_context_i {
     virtual ~llama_memory_context_i() = default;
 
@@ -95,6 +95,9 @@ struct llama_memory_context_i {
 
     // get the status of the memory context - used for error handling and checking if any updates would be applied
     virtual llama_memory_status get_status() const = 0;
+
+    // limit temporary workspace in a synthetic reservation context; live cache capacity is unchanged
+    virtual void set_reserve_size(uint32_t) {}
 };
 
 using llama_memory_context_ptr = std::unique_ptr<llama_memory_context_i>;
