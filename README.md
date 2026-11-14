@@ -2,6 +2,10 @@
 
 This is a fork of [llama.cpp](https://github.com/ggml-org/llama.cpp) focused on AMD GPU inference through ROCm/HIP, particularly DSpine speculative decoding on RDNA4 (`gfx1200`).
 
+The chart below shows measured generation and prompt-prefill speed as the populated conversation grows from 1K to 96K tokens. Generation speed uses the left axis; prefill speed uses the right axis. It was measured with Qwen3.8-27B-UD-IQ2_XXS.gguf, DSpine speculation, and Q4_0 target KV cache. The smaller-context points average 96- and 256-token runs; the larger-context points average two 256-token runs. Whiskers show the observed sample range.
+
+<img src="docs/development/dspine-rocm-speed-curve-1k-96k.png" width="50%" alt="Generation and prefill speed across populated context">
+
 ## Optimizations
 
 - **Fused recurrent-state gathers:** read Gated Delta Net (GDN) state directly from the cache, avoiding intermediate gather buffers.
