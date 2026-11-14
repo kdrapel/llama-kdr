@@ -1565,6 +1565,11 @@ struct llama_model_dflash : public llama_model_base {
 
         ggml_tensor * inp_pos;
 
+        // DSpine lattice inputs captured from the final bridge write.
+        ggml_tensor * dspine_raw = nullptr;
+        ggml_tensor * dspine_rms = nullptr;
+        ggml_tensor * dspine_q   = nullptr;
+
         llm_graph_input_attn_kv      * inp_attn      = nullptr;
         llm_graph_input_attn_kv_iswa * inp_attn_iswa = nullptr;
 
