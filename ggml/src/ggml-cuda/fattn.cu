@@ -559,6 +559,15 @@ static bool ggml_cuda_fattn_kv_type_supported(const ggml_type type) {
     }
 }
 
+// The vector kernel reads quantized K/V directly, the other kernels copy them to f16 on every call:
+static bool ggml_cuda_fattn_vec_quant_enabled() {
+    static const bool enabled = []() {
+        const char * env = getenv("GGML_CUDA_FATTN_VEC_QUANT");
+        return env == nullptr || atoi(env) != 0;
+    }();
+    return enabled;
+}
+
 static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const ggml_tensor * dst) {
 #ifndef FLASH_ATTN_AVAILABLE
     GGML_UNUSED(device); GGML_UNUSED(dst);
@@ -747,7 +756,8 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
                 }
             }
         } else {
-            if (Q->ne[1] <= 2) {
+            // The vector kernel re-reads K/V for every query head, so only use it for decode sized batches.
+            if (Q->ne[1] <= 8 && ggml_cuda_fattn_vec_quant_enabled()) {
                 return BEST_FATTN_KERNEL_VEC;
             }
         }

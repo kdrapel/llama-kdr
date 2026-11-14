@@ -917,6 +917,14 @@ static bool ggml_gallocr_reserve_n_impl(
         for (int c = 0; c < galloc->buf_tallocs[i]->n_chunks; c++) {
             size_t cur_chunk_size = galloc->buffers[i] ? ggml_vbuffer_chunk_size(galloc->buffers[i], c) : 0;
             size_t new_chunk_size = ggml_dyn_tallocr_max_size(galloc->buf_tallocs[i], c);
+            if (!no_alloc && cur_chunk_size > 0 && new_chunk_size > cur_chunk_size && getenv("GGML_GRAPH_ALLOC_GROWTH")) {
+                const size_t max_size = galloc->buf_tallocs[i]->max_chunk_size;
+                if (cur_chunk_size <= max_size && cur_chunk_size / 8 <= max_size - cur_chunk_size) {
+                    // Keep headroom for graphs whose attention workspace grows with each batch.
+                    new_chunk_size = MAX(new_chunk_size, cur_chunk_size + cur_chunk_size / 8);
+                    galloc->buf_tallocs[i]->chunks[c]->max_size = new_chunk_size;
+                }
+            }
             new_size += new_chunk_size;
             if (new_chunk_size > cur_chunk_size) {
                 realloc = true;

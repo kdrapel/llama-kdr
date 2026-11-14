@@ -5644,6 +5644,16 @@ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend, 
     if (cliff_op_profile_enabled()) {
         use_cuda_graph = false;
         cuda_graph_update_required = false;
+        int64_t columns = 0, kv = 0;
+        for (int i = 0; i < cgraph->n_nodes; ++i) {
+            const auto * node = cgraph->nodes[i];
+            if (node->op == GGML_OP_FLASH_ATTN_EXT) {
+                columns = std::max(columns, (int64_t) node->src[0]->ne[1]);
+                kv = std::max(kv, (int64_t) node->src[1]->ne[1]);
+            }
+        }
+        // Skip prefill graphs and short caches, they are profiled elsewhere.
+        cliff_op_gate = columns > 0 && columns <= 8 && kv >= 4096;
     }
     int64_t started = 0;
     if (profile) {
@@ -5739,7 +5749,13 @@ static void ggml_backend_cuda_graph_optimize(ggml_backend_t backend, ggml_cgraph
                     continue;
                 }
                 // Group both outputs before allocation so the shared result cannot alias intervening nodes.
-                std::rotate(cgraph->nodes + i + 3, cgraph->nodes + j, cgraph->nodes + j + 3);
+                ggml_tensor * grouped[3] = { cgraph->nodes[j], cgraph->nodes[j + 1], cgraph->nodes[j + 2] };
+                for (int k = j - i - 4; k >= 0; --k) {
+                    cgraph->nodes[i + 6 + k] = cgraph->nodes[i + 3 + k];
+                }
+                cgraph->nodes[i + 3] = grouped[0];
+                cgraph->nodes[i + 4] = grouped[1];
+                cgraph->nodes[i + 5] = grouped[2];
                 ggml_tensor * up = cgraph->nodes[i + 2]->src[1];
                 params->add_alloc_dep(params->user_data, up->src[1], cgraph->nodes[i + 5]);
                 params->add_alloc_dep(params->user_data, up->src[2], cgraph->nodes[i + 5]);

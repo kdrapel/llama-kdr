@@ -987,7 +987,7 @@ template <int DV, int ncols1, int ncols2>
 void launch_fattn(
     ggml_backend_cuda_context & ctx, ggml_tensor * dst, fattn_kernel_t fattn_kernel, const int nwarps, const size_t nbytes_shared,
     const int nbatch_fa, const bool need_f16_K, const bool need_f16_V, const bool stream_k, const bool use_sparse,
-    const int warp_size = WARP_SIZE, const bool async_kv_preload = false
+    const int warp_size = WARP_SIZE, const bool async_kv_preload = false, const bool group_grid_x = false
 ) {
     constexpr int ncols = ncols1 * ncols2;
 
@@ -1231,9 +1231,9 @@ void launch_fattn(
             }
         }
 
-        blocks_num.x = ntiles_x;
+        blocks_num.x = ntiles_x * (group_grid_x ? ntiles_z_gqa : 1);
         blocks_num.y = parallel_blocks;
-        blocks_num.z = ntiles_z_gqa*K->ne[2]*Q->ne[3];
+        blocks_num.z = (group_grid_x ? 1 : ntiles_z_gqa)*K->ne[2]*Q->ne[3];
 
         if (parallel_blocks > 1) {
             dst_tmp.alloc(parallel_blocks*ggml_nelements(KQV));

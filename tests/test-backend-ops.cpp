@@ -8951,6 +8951,52 @@ struct test_flash_attn_ext : public test_case {
     }
 };
 
+struct test_flash_attn_ext_gqa2 : public test_flash_attn_ext {
+    using test_flash_attn_ext::test_flash_attn_ext;
+
+    void initialize_tensors(ggml_context * ctx) override {
+        uint32_t state = 0x624751;
+        for (ggml_tensor * t = ggml_get_first_tensor(ctx); t; t = ggml_get_next_tensor(ctx, t)) {
+            if (t->view_src) {
+                continue;
+            }
+            std::vector<float> values(ggml_nelements(t));
+            for (size_t i = 0; i < values.size(); ++i) {
+                state = state*1664525u + 1013904223u;
+                values[i] = float(state >> 8)*(2.0f/16777216.0f) - 1.0f;
+            }
+            if (strcmp(t->name, "m") == 0) {
+                for (int64_t s = 0; s < t->ne[3]; ++s) {
+                    for (int64_t j = 0; j < nb; ++j) {
+                        for (int64_t k = 0; k < kv; ++k) {
+                            values[(s*nb + j)*kv + k] = k <= kv - nb + j - s ? -0.01f*float((k + s)%13) : -INFINITY;
+                        }
+                    }
+                }
+            }
+            if (t->type == GGML_TYPE_F32) {
+                ggml_backend_tensor_set(t, values.data(), 0, values.size()*sizeof(float));
+            } else {
+                std::vector<uint8_t> bytes(ggml_nbytes(t));
+                ggml_quantize_chunk(t->type, values.data(), bytes.data(), 0, ggml_nrows(t), t->ne[0], nullptr);
+                ggml_backend_tensor_set(t, bytes.data(), 0, bytes.size());
+            }
+        }
+    }
+
+    double err(const float * a, const float * b, size_t n) override {
+        double max_abs = 0, max_rel = 0, sum_sq = 0;
+        for (size_t i = 0; i < n; ++i) {
+            const double d = std::abs(double(a[i]) - b[i]);
+            max_abs = std::max(max_abs, d);
+            max_rel = std::max(max_rel, d/std::max(1e-6, std::abs(double(b[i]))));
+            sum_sq += d*d;
+        }
+        printf(" GQA2 max_abs=%.9g max_rel_floor_1e-6=%.9g rms=%.9g ", max_abs, max_rel, sqrt(sum_sq/n));
+        return nmse(a, b, n);
+    }
+};
+
 // large Q values, so the online softmax has to rescale the partial results
 struct test_flash_attn_ext_large_logits : public test_flash_attn_ext {
     static constexpr int q_range = 20;
@@ -12619,6 +12665,14 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_eval() {
     }
 
     // asymmetric head_dim (hsk != hsv) with one or both sides not 64-aligned
+    for (int nb : {1, 2, 3, 4, 5, 6, 7, 8}) {
+        for (int kv : {256, 65792}) {
+            test_cases.emplace_back(new test_flash_attn_ext_gqa2(256, 256, 4, {6, 2}, kv, nb, true, true, 8.0f, 0.0f, GGML_PREC_F32, GGML_TYPE_Q4_0, GGML_TYPE_Q4_0));
+        }
+        test_cases.emplace_back(new test_flash_attn_ext_gqa2(256, 256, 4, {6, 1}, 512, nb, true, false, 0.0f, 0.0f, GGML_PREC_F32, GGML_TYPE_Q4_0, GGML_TYPE_Q4_0));
+        test_cases.emplace_back(new test_flash_attn_ext_gqa2(256, 256, 4, {6, 1}, 512, nb, false, true, 0.0f, 30.0f, GGML_PREC_F32, GGML_TYPE_Q4_0, GGML_TYPE_Q4_0));
+    }
+
     test_cases.emplace_back(new test_flash_attn_ext(72, 64, 4, {1, 1}, 256, 2, true, false, 0, 0, GGML_PREC_F32, GGML_TYPE_F16, GGML_TYPE_F16));
     test_cases.emplace_back(new test_flash_attn_ext(64, 72, 4, {1, 1}, 256, 2, true, false, 0, 0, GGML_PREC_F32, GGML_TYPE_F16, GGML_TYPE_F16));
     test_cases.emplace_back(new test_flash_attn_ext(65, 67, 4, {1, 1}, 113, 75, true, true, 8.0f, 0, GGML_PREC_F32, GGML_TYPE_F16, GGML_TYPE_F16));

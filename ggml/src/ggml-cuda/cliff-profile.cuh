@@ -18,6 +18,9 @@ static bool cliff_op_profile_enabled() {
     return enabled;
 }
 
+// Set per graph so that only decode graphs over a populated cache are timed.
+static bool cliff_op_gate = false;
+
 static void cliff_memory_snapshot(const char * phase) {
 #if defined(_WIN32) && defined(GGML_USE_HIP) && !defined(__HIP_DEVICE_COMPILE__)
     static IDXGIFactory1 * factory = nullptr;
@@ -108,7 +111,7 @@ struct cliff_op_timer {
         return value;
     }
     cliff_op_timer(const ggml_tensor * node, cudaStream_t stream) : node(node), stream(stream) {
-        if (cliff_op_profile_enabled()) {
+        if (cliff_op_profile_enabled() && cliff_op_gate) {
             CUDA_CHECK(cudaDeviceSynchronize());
             CUDA_CHECK(cudaEventRecord(get_events().start, stream));
             started = ggml_time_us();
