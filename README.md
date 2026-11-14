@@ -2,7 +2,7 @@
 
 This fork is based on [Ajay9o9's llama.cpp fork](https://github.com/Ajay9o9), which targeted CUDA. It adapts that work for AMD GPU inference through ROCm/HIP, particularly DSpine speculative decoding on RDNA4 (`gfx1200`). The project remains based on [upstream llama.cpp](https://github.com/ggml-org/llama.cpp).
 
-The chart below shows measured generation and prompt-prefill speed as the populated conversation grows from 1K to 96K tokens. Generation speed uses the left axis; prefill speed uses the right axis. It was measured with Qwen3.8-27B-UD-IQ2_XXS.gguf, DSpine speculation, and Q4_0 target KV cache. The smaller-context points average 96- and 256-token runs; the larger-context points average two 256-token runs. Whiskers show the observed sample range.
+The chart below shows measured generation and prompt-prefill speed as the populated conversation grows from 1K to 96K tokens. Generation speed uses the left axis; prefill speed uses the right axis. It was measured with Qwen3.8-27B-UD-IQ2_XXS.gguf and DSpine speculation. The target model uses Q4_0 K/V cache; the draft model uses FP16 K/V cache. The smaller-context points average 96- and 256-token runs; the larger-context points average two 256-token runs. Whiskers show the observed sample range.
 
 <img src="docs/development/dspine-rocm-speed-curve-1k-96k.png" width="50%" alt="Generation and prefill speed across populated context">
 
@@ -68,7 +68,7 @@ The most important tuning parameters are:
 | `--spec-draft-n-max 6` | Limits draft length. Width 6 was faster than 9, 12, or 15 on the benchmark prompt, even after removing the memory cliff. |
 | `--spec-draft-n-ubatch 32` | Keeps the draft context's temporary buffers small. |
 | `-b 2048 -ub 512` | Sets logical batch capacity and the maximum physical microbatch size. Larger microbatches can require more workspace. |
-| Target `q4_0` / draft `f16` KV | Saves target-cache memory while keeping the measured draft-cache precision. |
+| Target-model K/V cache `q4_0` / draft-model K/V cache `f16` | Saves target-cache memory while keeping the measured draft-cache precision. |
 | `-fa on --n-gpu-layers all` | Enables Flash Attention and requests full GPU offload. |
 
 The command uses the default convolution-fusion setting. To reproduce the measurements above, set `$env:GGML_CUDA_GDN_FUSION = '0'` before starting it. The workspace optimization itself is enabled by default in this fork.
