@@ -1,6 +1,6 @@
 # llama.cpp - AMD optimizations
 
-This is a fork of [llama.cpp](https://github.com/ggml-org/llama.cpp) focused on AMD GPU inference through ROCm/HIP, particularly DSpine speculative decoding on RDNA4 (`gfx1200`).
+This fork is based on [Ajay9o9's llama.cpp fork](https://github.com/Ajay9o9), which targeted CUDA. It adapts that work for AMD GPU inference through ROCm/HIP, particularly DSpine speculative decoding on RDNA4 (`gfx1200`). The project remains based on [upstream llama.cpp](https://github.com/ggml-org/llama.cpp).
 
 The chart below shows measured generation and prompt-prefill speed as the populated conversation grows from 1K to 96K tokens. Generation speed uses the left axis; prefill speed uses the right axis. It was measured with Qwen3.8-27B-UD-IQ2_XXS.gguf, DSpine speculation, and Q4_0 target KV cache. The smaller-context points average 96- and 256-token runs; the larger-context points average two 256-token runs. Whiskers show the observed sample range.
 
