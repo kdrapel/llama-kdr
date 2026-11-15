@@ -593,6 +593,22 @@ static bool ggml_cuda_fattn_vec_quant_enabled() {
     return enabled;
 }
 
+static bool ggml_cuda_fattn_sparse_q4_enabled() {
+    static const bool enabled = []() {
+        const char * env = getenv("GGML_CUDA_FATTN_SPARSE_Q4");
+        return env != nullptr && atoi(env) != 0;
+    }();
+    return enabled;
+}
+
+static bool ggml_cuda_fattn_block_sparse_q4_enabled() {
+    static const bool enabled = []() {
+        const char * env = getenv("GGML_CUDA_FATTN_BLOCK_SPARSE_Q4");
+        return env != nullptr && atoi(env) != 0;
+    }();
+    return enabled;
+}
+
 static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const ggml_tensor * dst) {
 #ifndef FLASH_ATTN_AVAILABLE
     GGML_UNUSED(device); GGML_UNUSED(dst);
@@ -605,9 +621,10 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
     const ggml_tensor * V     = dst->src[2];
     const ggml_tensor * mask  = dst->src[3];
     const ggml_tensor * kv_rows = dst->src[5];
+    const bool kv_blocks = ggml_get_op_params_i32(dst, 5) != 0;
 
     // with kv_rows the kernel iterates over the mask columns
-    const int64_t n_kv = kv_rows ? kv_rows->ne[0] : K->ne[1];
+    const int64_t n_kv = kv_blocks ? ggml_get_op_params_i32(dst, 6) : (kv_rows ? kv_rows->ne[0] : K->ne[1]);
 
     const int gqa_ratio = Q->ne[2] / K->ne[2];
     GGML_ASSERT(Q->ne[2] % K->ne[2] == 0);
@@ -689,10 +706,24 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
         return BEST_FATTN_KERNEL_NONE;
     }
 
-    // only the MMA kernel reads K/V through kv_rows
     if (kv_rows) {
-        return GGML_CUDA_CC_IS_NVIDIA(cc) && turing_mma_available(cc) && mask && Q->ne[0] != 40 && Q->ne[0] != 72 ?
-            BEST_FATTN_KERNEL_MMA_F16 : BEST_FATTN_KERNEL_NONE;
+        if (kv_blocks) {
+            if (ggml_cuda_fattn_block_sparse_q4_enabled() && GGML_CUDA_CC_IS_RDNA4(cc) && Q->ne[0] == 256 &&
+                    Q->ne[1] > 1 && K->type == GGML_TYPE_Q4_0 && V->type == GGML_TYPE_Q4_0 && mask &&
+                    ggml_cuda_get_fattn_vec_case(Q->ne[0], K->type, V->type) != nullptr) {
+                return BEST_FATTN_KERNEL_VEC;
+            }
+            return BEST_FATTN_KERNEL_NONE;
+        }
+        if (GGML_CUDA_CC_IS_NVIDIA(cc) && turing_mma_available(cc) && mask && Q->ne[0] != 40 && Q->ne[0] != 72) {
+            return BEST_FATTN_KERNEL_MMA_F16;
+        }
+        if (ggml_cuda_fattn_sparse_q4_enabled() && GGML_CUDA_CC_IS_RDNA4(cc) && Q->ne[0] == 256 && Q->ne[1] > 1 &&
+                K->type == GGML_TYPE_Q4_0 && V->type == GGML_TYPE_Q4_0 && mask &&
+                ggml_cuda_get_fattn_vec_case(Q->ne[0], K->type, V->type) != nullptr) {
+            return BEST_FATTN_KERNEL_VEC;
+        }
+        return BEST_FATTN_KERNEL_NONE;
     }
 
     // For small batch sizes the vector kernel may be preferable over the kernels optimized for large batch sizes:

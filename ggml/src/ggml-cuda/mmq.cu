@@ -259,6 +259,12 @@ void ggml_cuda_mul_mat_q(
         J_best = ggml_cuda_mmq_get_J_best(src0->type, ncols_opt, fallback, cc, smpbo, prec_src1, &nthreads_best);
     }
     GGML_ASSERT(J_best > 0);
+    static const bool log_q2_k = std::getenv("GGML_CUDA_LOG_Q2_K") != nullptr;
+    if (log_q2_k && src0->type == GGML_TYPE_Q2_K) {
+        GGML_LOG_INFO("q2_k_mmq: k=%lld m=%lld n=%lld J=%d threads=%d fallback=%d smpbo=%zu\n",
+                (long long) ne00, (long long) ne01, (long long) ne11, J_best, nthreads_best, int(fallback), smpbo);
+    }
+
 
     // A tile of size J can read in at most J - 1 extra columns.
     // For simplicity, round up the padding of a full tile to a multiple of the number of bytes that nthreads can load in parallel.

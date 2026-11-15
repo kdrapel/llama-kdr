@@ -5412,13 +5412,20 @@ static struct ggml_tensor * ggml_flash_attn_ext_impl(
         struct ggml_tensor  * v,
         struct ggml_tensor  * mask,
         struct ggml_tensor  * kv_rows,
+        bool                  kv_blocks,
+        int32_t               n_kv,
         float                 scale,
         float                 max_bias,
         float                 logit_softcap) {
     GGML_ASSERT(ggml_can_mul_mat(k, q));
     // TODO: check if vT can be multiplied by (k*qT)
 
-    if (kv_rows) {
+    if (kv_blocks) {
+        GGML_ASSERT(kv_rows && kv_rows->type == GGML_TYPE_I32 && ggml_is_contiguous(kv_rows));
+        GGML_ASSERT(kv_rows->ne[0] == 2 && kv_rows->ne[1] > 0 && kv_rows->ne[2] == q->ne[3] && kv_rows->ne[3] == 1);
+        GGML_ASSERT(mask && mask->ne[0] == n_kv && n_kv > 0);
+        GGML_ASSERT(k->ne[3] == 1 && v->ne[3] == 1);
+    } else if (kv_rows) {
         // k and v are shared by all q slices, kv_rows picks the rows of each slice
         GGML_ASSERT(mask && mask->ne[0] == kv_rows->ne[0]);
         GGML_ASSERT(kv_rows->type == GGML_TYPE_I32 && ggml_is_contiguous(kv_rows));
@@ -5449,6 +5456,8 @@ static struct ggml_tensor * ggml_flash_attn_ext_impl(
 
     float params[] = { scale, max_bias, logit_softcap };
     ggml_set_op_params(result, params, sizeof(params));
+    ggml_set_op_params_i32(result, 5, kv_blocks);
+    ggml_set_op_params_i32(result, 6, n_kv);
 
     result->op     = GGML_OP_FLASH_ATTN_EXT;
     result->src[0] = q;
@@ -5469,7 +5478,7 @@ struct ggml_tensor * ggml_flash_attn_ext(
         float                 scale,
         float                 max_bias,
         float                 logit_softcap) {
-    return ggml_flash_attn_ext_impl(ctx, q, k, v, mask, NULL, scale, max_bias, logit_softcap);
+    return ggml_flash_attn_ext_impl(ctx, q, k, v, mask, NULL, false, 0, scale, max_bias, logit_softcap);
 }
 
 struct ggml_tensor * ggml_flash_attn_ext_rows(
@@ -5482,7 +5491,25 @@ struct ggml_tensor * ggml_flash_attn_ext_rows(
         float                 scale,
         float                 max_bias,
         float                 logit_softcap) {
-    return ggml_flash_attn_ext_impl(ctx, q, k, v, mask, kv_rows, scale, max_bias, logit_softcap);
+    return ggml_flash_attn_ext_impl(ctx, q, k, v, mask, kv_rows, false, 0, scale, max_bias, logit_softcap);
+}
+
+struct ggml_tensor * ggml_flash_attn_ext_blocks(
+        struct ggml_context * ctx,
+        struct ggml_tensor  * q,
+        struct ggml_tensor  * k,
+        struct ggml_tensor  * v,
+        struct ggml_tensor  * mask,
+        struct ggml_tensor  * kv_blocks,
+        int32_t               n_kv,
+        float                 scale,
+        float                 max_bias,
+        float                 logit_softcap) {
+    GGML_ASSERT(kv_blocks != NULL && kv_blocks->type == GGML_TYPE_I32);
+    GGML_ASSERT(kv_blocks->ne[0] == 2 && ggml_is_contiguous(kv_blocks));
+    GGML_ASSERT(kv_blocks->ne[1] > 0 && kv_blocks->ne[2] == q->ne[3] && kv_blocks->ne[3] == 1);
+    GGML_ASSERT(mask != NULL && mask->ne[0] == n_kv && n_kv > 0);
+    return ggml_flash_attn_ext_impl(ctx, q, k, v, mask, kv_blocks, true, n_kv, scale, max_bias, logit_softcap);
 }
 
 

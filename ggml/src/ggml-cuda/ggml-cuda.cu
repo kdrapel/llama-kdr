@@ -2488,6 +2488,31 @@ static void ggml_cuda_mul_mat(ggml_backend_cuda_context & ctx, const ggml_tensor
         return;
     }
     // from a per-type number of src1 columns up to 24, few-row MMQ is faster than MMVQ and MMQ
+#if defined(GGML_USE_HIP)
+    const bool iq7_shape = cc == GGML_CUDA_CC_RDNA4 && ne11 == 7 && ne2 == 1 && ne3 == 1 &&
+            ne00 == 5120 && ne01 == 17408 && (src0->type == GGML_TYPE_IQ2_S || src0->type == GGML_TYPE_IQ3_XXS ||
+            src0->type == GGML_TYPE_IQ3_S);
+    if (iq7_shape && ggml_cuda_env_flag("GGML_CUDA_DIAG_IQ7")) {
+        cudaEvent_t start, end;
+        CUDA_CHECK(cudaEventCreateWithFlags(&start, 0));
+        CUDA_CHECK(cudaEventCreateWithFlags(&end, 0));
+        CUDA_CHECK(cudaEventRecord(start, ctx.stream()));
+        const bool mmq = ggml_cuda_env_flag("GGML_CUDA_DIAG_IQ7_MMQ");
+        if (mmq) {
+            ggml_cuda_mul_mat_q(ctx, src0, src1, nullptr, dst);
+        } else {
+            ggml_cuda_mul_mat_vec_q(ctx, src0, src1, nullptr, dst);
+        }
+        CUDA_CHECK(cudaEventRecord(end, ctx.stream()));
+        CUDA_CHECK(cudaEventSynchronize(end));
+        float elapsed;
+        CUDA_CHECK(hipEventElapsedTime(&elapsed, start, end));
+        GGML_LOG_INFO("iq7_event: type=%s path=%s gpu_ms=%.6f\n", ggml_type_name(src0->type), mmq ? "mmq" : "mmvq", elapsed);
+        CUDA_CHECK(cudaEventDestroy(start));
+        CUDA_CHECK(cudaEventDestroy(end));
+        return;
+    }
+#endif
     const bool use_mmq_few = ggml_cuda_should_use_mmq_few(src0, src1, cc);
     if (!use_mmq_few && ggml_cuda_should_use_mmvq(src0->type, cc, ne11)) {
         ggml_cuda_mul_mat_vec_q(ctx, src0, src1, nullptr, dst);
@@ -2495,6 +2520,44 @@ static void ggml_cuda_mul_mat(ggml_backend_cuda_context & ctx, const ggml_tensor
     }
     if (use_mmq_few) {
         ggml_cuda_mul_mat_q_few(ctx, src0, src1, dst);
+        return;
+    }
+    // Q2_K MMQ spills registers for these dense projection tiles on gfx1200.
+    const bool q2_k_projection_blas = cc == GGML_CUDA_CC_RDNA4 && src0->type == GGML_TYPE_Q2_K && ne11 == 512 &&
+            ne2 == 1 && ne3 == 1 && ggml_is_contiguous(src0) && ggml_is_contiguous(src1) &&
+            ((ne00 == 5120 && (ne01 == 6144 || ne01 == 10240 || ne01 == 12288 || ne01 == 17408)) ||
+             (ne00 == 17408 && ne01 == 5120));
+    if (q2_k_projection_blas) {
+        static const bool profile_q2_k = ggml_cuda_env_flag("GGML_CUDA_PROFILE_Q2_K");
+        cudaEvent_t start = nullptr;
+        cudaEvent_t end = nullptr;
+        size_t free_before = 0;
+        size_t total = 0;
+        if (profile_q2_k) {
+            CUDA_CHECK(cudaEventCreateWithFlags(&start, 0));
+            CUDA_CHECK(cudaEventCreateWithFlags(&end, 0));
+            CUDA_CHECK(cudaMemGetInfo(&free_before, &total));
+            CUDA_CHECK(cudaEventRecord(start, ctx.stream()));
+        }
+        ggml_cuda_mul_mat_cublas(ctx, src0, src1, dst);
+        if (profile_q2_k) {
+            CUDA_CHECK(cudaEventRecord(end, ctx.stream()));
+            CUDA_CHECK(cudaEventSynchronize(end));
+            float elapsed_ms = 0;
+            size_t free_after = 0;
+#if defined(GGML_USE_HIP)
+            CUDA_CHECK(hipEventElapsedTime(&elapsed_ms, start, end));
+#elif defined(GGML_USE_MUSA)
+            CUDA_CHECK(musaEventElapsedTime(&elapsed_ms, start, end));
+#else
+            CUDA_CHECK(cudaEventElapsedTime(&elapsed_ms, start, end));
+#endif
+            CUDA_CHECK(cudaMemGetInfo(&free_after, &total));
+            GGML_LOG_INFO("q2_k_blas: k=%" PRId64 " m=%" PRId64 " n=%" PRId64 " gpu_ms=%.6f free_before=%zu free_after=%zu total=%zu\n",
+                    ne00, ne01, ne11, elapsed_ms, free_before, free_after, total);
+            CUDA_CHECK(cudaEventDestroy(start));
+            CUDA_CHECK(cudaEventDestroy(end));
+        }
         return;
     }
     if (ggml_cuda_should_use_mmq(src0->type, cc, ne11, /*n_experts =*/ 0)) {
@@ -2703,6 +2766,103 @@ static void ggml_cuda_mul_mat_id(ggml_backend_cuda_context & ctx, ggml_tensor * 
         ne0, ne0*ts_dst_sorted, ne_get_rows*ne0*ts_dst_sorted, ne_get_rows*ne0*ts_dst_sorted,
         ne_get_rows, 1, 1, sizeof(int32_t), ne_get_rows*sizeof(int32_t), ne_get_rows*sizeof(int32_t),
         nb1, nb2, nb3, stream);
+}
+
+// Profiling serializes GPU work and measures dispatch plus execution time.
+static bool ggml_cuda_profile_ops_enabled() {
+    static const bool enabled = ggml_cuda_env_flag("GGML_CUDA_PROFILE_OPS");
+    return enabled;
+}
+
+static void ggml_cuda_profile_op(ggml_backend_cuda_context * ctx, const ggml_tensor * node, int fused, int64_t start) {
+    CUDA_CHECK(cudaDeviceSynchronize());
+    const ggml_tensor * weight = node->src[0];
+    GGML_LOG_INFO("cuda_profile: device=%d op=%s name=%s src0=%s type=%s ne=%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 " fused=%d us=%" PRId64 "\n",
+            ctx->device, ggml_op_name(node->op), node->name,
+            weight ? weight->name : "none", weight ? ggml_type_name(weight->type) : "none",
+            node->ne[0], node->ne[1], node->ne[2], node->ne[3], fused, ggml_time_us() - start);
+}
+
+// Decode-only per-op GPU event attribution, opt-in via GGML_CUDA_PROFILE_DECODE.
+// Serializes ops; event time is kernel time, the run's throughput is not.
+static bool ggml_cuda_profile_decode_enabled() {
+    static const bool enabled = ggml_cuda_env_flag("GGML_CUDA_PROFILE_DECODE");
+    return enabled;
+}
+
+static thread_local bool ggml_cuda_decode_gate = false;
+
+struct ggml_cuda_decode_events {
+    cudaEvent_t start = nullptr;
+    cudaEvent_t stop  = nullptr;
+};
+
+static ggml_cuda_decode_events & ggml_cuda_decode_fused_events() {
+    static thread_local ggml_cuda_decode_events events;
+    if (events.start == nullptr) {
+        CUDA_CHECK(cudaEventCreateWithFlags(&events.start, 0));
+        CUDA_CHECK(cudaEventCreateWithFlags(&events.stop, 0));
+    }
+    return events;
+}
+
+static void ggml_cuda_decode_log_op(const ggml_tensor * node, float gpu_ms) {
+    const ggml_tensor * weight = node->src[0];
+    GGML_LOG_INFO("decode_op name=%s op=%s src0=%s type=%s ne=%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 " gpu_ms=%.4f\n",
+            node->name, ggml_op_name(node->op),
+            weight ? weight->name : "none", weight ? ggml_type_name(weight->type) : "none",
+            node->ne[0], node->ne[1], node->ne[2], node->ne[3], gpu_ms);
+}
+
+struct ggml_cuda_decode_timer {
+    const ggml_tensor * node;
+    cudaStream_t stream;
+    cudaEvent_t start = nullptr;
+    cudaEvent_t stop  = nullptr;
+    bool active = false;
+
+    ggml_cuda_decode_timer(const ggml_tensor * node, cudaStream_t stream) : node(node), stream(stream) {
+        if (!ggml_cuda_decode_gate) {
+            return;
+        }
+        if (start == nullptr) {
+            CUDA_CHECK(cudaEventCreateWithFlags(&start, 0));
+            CUDA_CHECK(cudaEventCreateWithFlags(&stop, 0));
+        }
+        CUDA_CHECK(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaEventRecord(start, stream));
+        active = true;
+    }
+
+    ~ggml_cuda_decode_timer() {
+        if (!active) {
+            return;
+        }
+        CUDA_CHECK(cudaEventRecord(stop, stream));
+        CUDA_CHECK(cudaEventSynchronize(stop));
+        float gpu_ms = 0;
+#if defined(GGML_USE_HIP)
+        CUDA_CHECK(hipEventElapsedTime(&gpu_ms, start, stop));
+#elif defined(GGML_USE_MUSA)
+        CUDA_CHECK(musaEventElapsedTime(&gpu_ms, start, stop));
+#else
+        CUDA_CHECK(cudaEventElapsedTime(&gpu_ms, start, stop));
+#endif
+        ggml_cuda_decode_log_op(node, gpu_ms);
+    }
+};
+
+// Narrow attention columns over a populated cache identify a decode graph.
+static bool ggml_cuda_graph_is_decode(const ggml_cgraph * cgraph) {
+    for (int i = 0; i < cgraph->n_nodes; ++i) {
+        const ggml_tensor * node = cgraph->nodes[i];
+        // q is [head_dim, n_head, n_columns, n_batch], k is [head_dim, n_kv, n_head_kv, n_batch]
+        if (node->op == GGML_OP_FLASH_ATTN_EXT && node->ne[2] <= 8 && node->ne[3] == 1 &&
+                node->src[1] != nullptr && node->src[1]->ne[1] >= 4096) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static bool ggml_cuda_compute_forward(ggml_backend_cuda_context & ctx, struct ggml_tensor * dst) {
@@ -5329,9 +5489,41 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
                     continue;
                 }
 
+                const bool profile_ops = ggml_cuda_profile_ops_enabled();
+                int64_t profile_start = 0;
+                if (profile_ops) {
+                    CUDA_CHECK(cudaDeviceSynchronize());
+                    profile_start = ggml_time_us();
+                }
+
+                // gated_delta_net runs fused with its state copy, so it never reaches compute_forward
+                const bool decode_fused = ggml_cuda_decode_gate && node->op == GGML_OP_GATED_DELTA_NET;
+                if (decode_fused) {
+                    ggml_cuda_decode_events & events = ggml_cuda_decode_fused_events();
+                    CUDA_CHECK(cudaDeviceSynchronize());
+                    CUDA_CHECK(cudaEventRecord(events.start, cuda_ctx->stream()));
+                }
+
                 int nodes_to_skip = ggml_cuda_try_fuse(cuda_ctx, cgraph, i);
 
                 if (nodes_to_skip != 0) {
+                    if (decode_fused) {
+                        ggml_cuda_decode_events & events = ggml_cuda_decode_fused_events();
+                        CUDA_CHECK(cudaEventRecord(events.stop, cuda_ctx->stream()));
+                        CUDA_CHECK(cudaEventSynchronize(events.stop));
+                        float gpu_ms = 0;
+#if defined(GGML_USE_HIP)
+                        CUDA_CHECK(hipEventElapsedTime(&gpu_ms, events.start, events.stop));
+#elif defined(GGML_USE_MUSA)
+                        CUDA_CHECK(musaEventElapsedTime(&gpu_ms, events.start, events.stop));
+#else
+                        CUDA_CHECK(cudaEventElapsedTime(&gpu_ms, events.start, events.stop));
+#endif
+                        ggml_cuda_decode_log_op(node, gpu_ms);
+                    }
+                    if (profile_ops) {
+                        ggml_cuda_profile_op(cuda_ctx, node, nodes_to_skip + 1, profile_start);
+                    }
 #ifdef GGML_CUDA_DEBUG
                     const int last_fused = i + nodes_to_skip;
                     GGML_LOG_INFO("nodes_fused: %d, first: %s (%s), last: %s (%s)\n",
@@ -5358,7 +5550,16 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
                 GGML_UNUSED(integrated);
 #endif  // NDEBUG
 
-                bool ok = ggml_cuda_compute_forward(*cuda_ctx, node);
+                bool ok = false;
+                if (ggml_cuda_decode_gate) {
+                    ggml_cuda_decode_timer timer(node, cuda_ctx->stream());
+                    ok = ggml_cuda_compute_forward(*cuda_ctx, node);
+                } else {
+                    ok = ggml_cuda_compute_forward(*cuda_ctx, node);
+                }
+                if (profile_ops) {
+                    ggml_cuda_profile_op(cuda_ctx, node, 1, profile_start);
+                }
                 if (!ok) {
                     GGML_LOG_ERROR("%s: op not supported %s (%s)\n", __func__, node->name, ggml_op_name(node->op));
                 }
@@ -5468,6 +5669,19 @@ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend, 
         }
     }
 #endif // USE_CUDA_GRAPH
+
+    static const bool profile_q2_k = ggml_cuda_env_flag("GGML_CUDA_PROFILE_Q2_K");
+    static const bool profile_decode = ggml_cuda_profile_decode_enabled();
+    static const bool diag_iq7 = ggml_cuda_env_flag("GGML_CUDA_DIAG_IQ7");
+    ggml_cuda_decode_gate = profile_decode && ggml_cuda_graph_is_decode(cgraph);
+    if (ggml_cuda_decode_gate) {
+        static thread_local int decode_graph_idx = 0;
+        GGML_LOG_INFO("decode_graph idx=%d nodes=%d\n", decode_graph_idx++, cgraph->n_nodes);
+    }
+    if (ggml_cuda_profile_ops_enabled() || profile_q2_k || profile_decode || diag_iq7) {
+        use_cuda_graph = false;
+        cuda_graph_update_required = false;
+    }
 
     if (use_cuda_graph && cuda_graph_update_required) {
         // Start CUDA graph capture

@@ -2270,6 +2270,20 @@ extern "C" {
             float                 max_bias,
             float                 logit_softcap);
 
+    // Experimental block-list variant. kv_blocks is [2, n_blocks, ne3] I32 pairs { row_start, row_count }.
+    // mask columns are packed in the same order as the listed ranges; n_kv is the packed row count.
+    GGML_API struct ggml_tensor * ggml_flash_attn_ext_blocks(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * q,
+            struct ggml_tensor  * k,
+            struct ggml_tensor  * v,
+            struct ggml_tensor  * mask,
+            struct ggml_tensor  * kv_blocks,
+            int32_t               n_kv,
+            float                 scale,
+            float                 max_bias,
+            float                 logit_softcap);
+
     GGML_API enum ggml_prec ggml_flash_attn_ext_get_prec(
             const struct ggml_tensor * a);
 

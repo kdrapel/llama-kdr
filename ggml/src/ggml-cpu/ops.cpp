@@ -8772,6 +8772,17 @@ void ggml_compute_forward_top_k(
     }
 }
 
+static int64_t ggml_flash_attn_ext_block_row(const int32_t * blocks, const int64_t n_blocks, const int64_t ic) {
+    const int64_t block = ic / 256;
+    const int64_t offset = ic % 256;
+    if (block >= n_blocks) {
+        return -1;
+    }
+    const int32_t row_start = blocks[2*block + 0];
+    const int32_t row_count = blocks[2*block + 1];
+    return offset < row_count ? row_start + offset : -1;
+}
+
 static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
         const ggml_compute_params * params,
         ggml_tensor * dst,
@@ -8888,7 +8899,8 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
         const float * pq = (const float *) ((char *) q->data + (iq1*nbq1 + iq2*nbq2 + iq3*nbq3));
         q_to_vec_dot(pq, Q_q, DK);
 
-        const int32_t * rows = kv_rows ? (const int32_t *) ((const char *) kv_rows->data + iq3*kv_rows->nb[1]) : nullptr;
+        const bool kv_blocks = ggml_get_op_params_i32(dst, 5) != 0;
+        const int32_t * rows = kv_rows ? (const int32_t *) ((const char *) kv_rows->data + iq3*(kv_blocks ? kv_rows->nb[2] : kv_rows->nb[1])) : nullptr;
 
         // online softmax / attention
         // loop over n_kv and n_head_kv
@@ -8900,7 +8912,7 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
                 continue;
             }
 
-            const int64_t ik1 = rows ? rows[ic] : ic;
+            const int64_t ik1 = rows ? (kv_blocks ? ggml_flash_attn_ext_block_row(rows, kv_rows->ne[1], ic) : rows[ic]) : ic;
             if (ik1 < 0) {
                 continue;
             }
@@ -9071,7 +9083,8 @@ static void ggml_compute_forward_flash_attn_ext_tiled(
 
     // with kv_rows the loop runs over the mask columns and reads K/V rows through kv_rows
     const ggml_tensor * kv_rows = dst->src[5];
-    const int64_t n_kv_cols = kv_rows ? kv_rows->ne[0] : nek1;
+    const bool kv_blocks = ggml_get_op_params_i32(dst, 5) != 0;
+    const int64_t n_kv_cols = kv_blocks ? ggml_get_op_params_i32(dst, 6) : (kv_rows ? kv_rows->ne[0] : nek1);
 
     int ir = ir0;
     while (ir < ir1) {
@@ -9081,8 +9094,10 @@ static void ggml_compute_forward_flash_attn_ext_tiled(
         const int iq1 = (ir - iq3*neq2*neq1 - iq2*neq1);
 
         // padding rows are masked, read row 0 for them
-        const int32_t * rows = kv_rows ? (const int32_t *) ((const char *) kv_rows->data + iq3*kv_rows->nb[1]) : nullptr;
-        auto kv_row = [rows](int64_t i) -> int64_t { return rows ? std::max<int32_t>(rows[i], 0) : i; };
+        const int32_t * rows = kv_rows ? (const int32_t *) ((const char *) kv_rows->data + iq3*(kv_blocks ? kv_rows->nb[2] : kv_rows->nb[1])) : nullptr;
+        auto kv_row = [rows, kv_blocks, kv_rows](int64_t i) -> int64_t {
+            return rows ? std::max<int64_t>(kv_blocks ? ggml_flash_attn_ext_block_row(rows, kv_rows->ne[1], i) : rows[i], 0) : i;
+        };
 
         // Number of valid rows in this tile:
         // - limited by tile size (Q_TILE_SZ)
@@ -9410,7 +9425,8 @@ static void ggml_compute_forward_flash_attn_ext_f16(
 
     // with kv_rows the loops run over the mask columns, the split KV path does not support it
     const ggml_tensor * kv_rows = dst->src[5];
-    const int64_t n_kv_cols = kv_rows ? kv_rows->ne[0] : nek1;
+    const bool kv_blocks = ggml_get_op_params_i32(dst, 5) != 0;
+    const int64_t n_kv_cols = kv_blocks ? ggml_get_op_params_i32(dst, 6) : (kv_rows ? kv_rows->ne[0] : nek1);
 
     const bool kv_is_f32_or_f16 = (k->type == GGML_TYPE_F32 || k->type == GGML_TYPE_F16);
     const bool use_split_kv_path = !use_ref && !kv_rows && (neq1 == 1 && neq3 == 1) && kv_is_f32_or_f16 && (k->type == v->type) && q->type == GGML_TYPE_F32 && nek1 >= 512;

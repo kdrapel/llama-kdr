@@ -1045,10 +1045,12 @@ void launch_fattn(
     const ggml_tensor * mask    = dst->src[3];
     const ggml_tensor * sinks   = dst->src[4];
     const ggml_tensor * kv_rows = dst->src[5];
+    const bool kv_blocks = ggml_get_op_params_i32(dst, 5) != 0;
 
     // with kv_rows the kernel iterates over the mask columns and reads K/V rows through kv_rows
-    const int64_t n_kv_cols = kv_rows ? kv_rows->ne[0] : K->ne[1];
+    const int64_t n_kv_cols = kv_blocks ? ggml_get_op_params_i32(dst, 6) : (kv_rows ? kv_rows->ne[0] : K->ne[1]);
     GGML_ASSERT(!kv_rows || !use_sparse);
+    GGML_ASSERT(!kv_blocks || (kv_rows && n_kv_cols > 0 && kv_rows->ne[1] > 0));
 
     ggml_tensor * KQV = dst;
 
@@ -1323,7 +1325,7 @@ void launch_fattn(
         Q->ne[0], ne01,     Q->ne[2], Q->ne[3], Q->nb[1], Q->nb[2], Q->nb[3],
         K->ne[0], n_kv, K->ne[2], K->ne[3], nb11, nb12, nb13,
         nb21, nb22, nb23,
-        mask ? mask->ne[1] : 0, mask ? mask->ne[2] : 0, mask ? mask->ne[3] : 0,
+        mask ? mask->ne[1] : 0, mask ? (kv_blocks ? -int32_t(kv_rows->ne[1]) : int32_t(mask->ne[2])) : 0, mask ? mask->ne[3] : 0,
         mask ? mask->nb[1] : 0, mask ? mask->nb[2] : 0, mask ? mask->nb[3] : 0
     );
     CUDA_CHECK(cudaGetLastError());
