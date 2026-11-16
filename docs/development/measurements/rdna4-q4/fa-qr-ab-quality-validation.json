@@ -1,0 +1,34 @@
+{
+  "checks": [
+    {
+      "response": "fa-qr-ab-64k-20261116-1-stock.quality-response.json",
+      "function": "fib",
+      "reference_matches": 1001,
+      "invalid_inputs_rejected": [
+        "-1",
+        "-100",
+        "1.5",
+        "'10'",
+        "None",
+        "True"
+      ],
+      "stop_type": "eos",
+      "scope": "function results and input validation only; proof reviewed separately"
+    },
+    {
+      "response": "fa-qr-ab-64k-20261116-2-candidate.quality-response.json",
+      "function": "fib",
+      "reference_matches": 1001,
+      "invalid_inputs_rejected": [
+        "-1",
+        "-100",
+        "1.5",
+        "'10'",
+        "None",
+        "True"
+      ],
+      "stop_type": "eos",
+      "scope": "function results and input validation only; proof reviewed separately"
+    }
+  ]
+}

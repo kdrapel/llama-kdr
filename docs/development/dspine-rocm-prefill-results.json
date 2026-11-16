@@ -1,0 +1,2350 @@
+{
+  "head": "90b0a6bf8",
+  "model": "Qwen3.8-27B-UD-IQ2_XXS.gguf",
+  "requests": {
+    "4096": {
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a software engineering assistant. Continue this project conversation, retaining its decisions and constraints. Answer the final request directly."
+        },
+        {
+          "role": "user",
+          "content": "Project review 1: examine these scheduler observations and propose a bounded implementation with stable ordering and explicit error handling.\nRecord 0: scheduler route /v1/jobs/0 handled 13 entries in 7 milliseconds; retry limit 1, audit key 5feceb66ffc8.\nRecord 1: scheduler route /v1/jobs/1 handled 30 entries in 38 milliseconds; retry limit 2, audit key 6b86b273ff34.\nRecord 2: scheduler route /v1/jobs/2 handled 47 entries in 69 milliseconds; retry limit 3, audit key d4735e3a265e.\nRecord 3: scheduler route /v1/jobs/3 handled 64 entries in 100 milliseconds; retry limit 4, audit key 4e07408562be.\nRecord 4: scheduler route /v1/jobs/4 handled 81 entries in 131 milliseconds; retry limit 5, audit key 4b227777d4dd.\nRecord 5: scheduler route /v1/jobs/5 handled 98 entries in 162 milliseconds; retry limit 1, audit key ef2d127de37b.\nRecord 6: scheduler route /v1/jobs/6 handled 115 entries in 193 milliseconds; retry limit 2, audit key e7f6c011776e.\nRecord 7: scheduler route /v1/jobs/7 handled 132 entries in 224 milliseconds; retry limit 3, audit key 7902699be42c.\nRecord 8: scheduler route /v1/jobs/8 handled 149 entries in 255 milliseconds; retry limit 4, audit key 2c624232cdd2.\nRecord 9: scheduler route /v1/jobs/9 handled 166 entries in 286 milliseconds; retry limit 5, audit key 19581e27de7c.\nRecord 10: scheduler route /v1/jobs/10 handled 183 entries in 317 milliseconds; retry limit 1, audit key 4a44dc153642.\nRecord 11: scheduler route /v1/jobs/11 handled 200 entries in 348 milliseconds; retry limit 2, audit key 4fc82b26aecb.\nRecord 12: scheduler route /v1/jobs/12 handled 217 entries in 379 milliseconds; retry limit 3, audit key 6b51d431df5d.\nRecord 13: scheduler route /v1/jobs/13 handled 234 entries in 9 milliseconds; retry limit 4, audit key 3fdba35f04dc.\nRecord 14: scheduler route /v1/jobs/14 handled 251 entries in 40 milliseconds; retry limit 5, audit key 8527a891e224.\nRecord 15: scheduler route /v1/jobs/15 handled 268 entries in 71 milliseconds; retry limit 1, audit key e629fa6598d7.\nRecord 16: scheduler route /v1/jobs/16 handled 285 entries in 102 milliseconds; retry limit 2, audit key b17ef6d19c7a.\nRecord 17: scheduler route /v1/jobs/17 handled 302 entries in 133 milliseconds; retry limit 3, audit key 4523540f1504.\nRecord 18: scheduler route /v1/jobs/18 handled 319 entries in 164 milliseconds; retry limit 4, audit key 4ec9599fc203.\nRecord 19: scheduler route /v1/jobs/19 handled 336 entries in 195 milliseconds; retry limit 5, audit key 9400f1b21cb5.\nRecord 20: scheduler route /v1/jobs/20 handled 353 entries in 226 milliseconds; retry limit 1, audit key f5ca38f748a1.\nRecord 21: scheduler route /v1/jobs/21 handled 370 entries in 257 milliseconds; retry limit 2, audit key 6f4b6612125f.\nRecord 22: scheduler route /v1/jobs/22 handled 387 entries in 288 milliseconds; retry limit 3, audit key 785f3ec7eb32.\nRecord 23: scheduler route /v1/jobs/23 handled 404 entries in 319 milliseconds; retry limit 4, audit key 535fa30d7e25.\nRecord 24: scheduler route /v1/jobs/24 handled 421 entries in 350 milliseconds; retry limit 5, audit key c2356069e9d1.\nRecord 25: scheduler route /v1/jobs/25 handled 438 entries in 381 milliseconds; retry limit 1, audit key b7a56873cd77.\nRecord 26: scheduler route /v1/jobs/26 handled 455 entries in 11 milliseconds; retry limit 2, audit key 5f9c4ab08cac."
+        },
+        {
+          "role": "assistant",
+          "content": "For review 1, keep scheduler work bounded by the configured queue size. Validate identifiers before processing, preserve input order in the result, and record failures separately. Retry transient failures only, using the recorded limit. Never mutate the input collection.\n\nTests should cover empty input, duplicate identifiers, partial failures, and cancellation. Compare the accepted result count against the audit entries before changing concurrency. A timeout should produce a failed item rather than silently discarding the rest of the batch.\n\n```python\ndef collect_0(records):\n    seen = set()\n    output = []\n    for record in records:\n        key = record[\"id\"]\n        if key not in seen:\n            seen.add(key)\n            output.append(record)\n    return output\n```"
+        },
+        {
+          "role": "user",
+          "content": "Additional project review notes:\nProject review 1: examine these scheduler observations and propose a bounded implementation with stable ordering and explicit error handling.\nRecord 0: scheduler route /v1/jobs/0 handled 13 entries in 7 milliseconds; retry limit 1, audit key 5feceb66ffc8.\nRecord 1: scheduler route /v1/jobs/1 handled 30 entries in 38 milliseconds; retry limit 2, audit key 6b86b273ff34.\nRecord 2: scheduler route /v1/jobs/2 handled 47 entries in 69 milliseconds; retry limit 3, audit key d4735e3a265e.\nRecord 3: scheduler route /v1/jobs/3 handled 64 entries in 100 milliseconds; retry limit 4, audit key 4e07408562be.\nRecord 4: scheduler route /v1/jobs/4 handled 81 entries in 131 milliseconds; retry limit 5, audit key 4b227777d4dd.\nRecord 5: scheduler route /v1/jobs/5 handled 98 entries in 162 milliseconds; retry limit 1, audit key ef2d127de37b.\nRecord 6: scheduler route /v1/jobs/6 handled 115 entries in 193 milliseconds; retry limit 2, audit key e7f6c011776e.\nRecord 7: scheduler route /v1/jobs/7 handled 132 entries in 224 milliseconds; retry limit 3, audit key 7902699be42c.\nRecord 8: scheduler route /v1/jobs/8 handled 149 entries in 255 milliseconds; retry limit 4, audit key 2c624232cdd2.\nRecord 9: scheduler route /v1/jobs/9 handled 166 entries in 286 milliseconds; retry limit 5, audit key 19581e27de7c.\nRecord 10: scheduler route /v1/jobs/10 handled 183 entries in 317 milliseconds; retry limit 1, audit key 4a44dc153642.\nRecord 11: scheduler route /v1/jobs/11 handled 200 entries in 348 milliseconds; retry limit 2, audit key 4fc82b26aecb.\nRecord 12: scheduler route /v1/jobs/12 handled 217 entries in 379 milliseconds; retry limit 3, audit key 6b51d431df5d.\nRecord 13: scheduler route /v1/jobs/13 handled 234 entries in 9 milliseconds; retry limit 4, audit key 3fdba35f04dc.\nRecord 14: scheduler route /v1/jobs/14 handled 251 entries in 40 milliseconds; retry limit 5, audit key 8527a891e224.\nRecord 15: scheduler route /v1/jobs/15 handled 268 entries in 71 milliseconds; retry limit 1, audit key e629fa6598d7.\nRecord 16: scheduler route /v1/jobs/16 handled 285 entries in 102 milliseconds; retry limit 2, audit key b17ef6d19c7a.\nRecord 17: scheduler route /v1/jobs/17 handled 302 entries in 133 milliseconds; retry limit 3, audit key 4523540f1504.\nRecord 18: scheduler route /v1/jobs/18 handled 319 entries in 164 milliseconds; retry limit 4, audit key 4ec9599fc203.\nRecord 19: scheduler route /v1/jobs/19 handled 336 entries in 195 milliseconds; retry limit 5, audit key 9400f1b21cb5.\nRecord 20: scheduler route /v1/jobs/20 handled 353 entries in 226 milliseconds; retry limit 1, audit key f5ca38f748a1.\nRecord 21: scheduler route /v1/jobs/21 handled 370 entries in 257 milliseconds; retry limit 2, audit key 6f4b6612125f.\nRecord 22: scheduler route /v1/jobs/22 handled 387 entries in 288 milliseconds; retry limit 3, audit key 785f3ec7eb32.\nRecord 23: scheduler route /v1/jobs/23 handled 404 entries in 319 milliseconds; retry limit 4, audit key 535fa30d7e25.\nRecord 24: scheduler route /v1/jobs/24 handled 421 entries in 350 milliseconds; retry limit 5, audit key c2356069e9d1.\nRecord 25: scheduler route /v1/jobs/25 handled 438 entries in 381 milliseconds; retry limit 1, audit key b7a56873cd77.\nRecord 26: scheduler route /v1/jobs/26 handled 455 entries in 11 milliseconds; retry limit 2, audit key 5f9c4ab08cac.\nProject review 2: examine these catalog observations and propose a bounded implementation with stable ordering and explicit error handling.\nRecord 10000: catalog route /v2/jobs/0 handled 523 entries in 34 milliseconds; retry limit 1, audit key 39e5b4830d4d.\nRecord 10001: catalog route /v2/jobs/1 handled 540 entries in 65 milliseconds; retry limit 2, audit key e443169117a1.\nRecord 10002: catalog route /v2/jobs/2 handled 557 entries in 96 milliseconds; retry limit 3, audit key 56acd2f85500.\nRecord 10003: catalog route /v2/jobs/3 handled 574 entries in 127 milliseconds; retry limit 4, audit key e162e30a5a4c.\nRecord 10004: catalog route /v2/jobs/4 handled 591 entries in 158 milliseconds; retry limit 5, audit key 0d9a5484f79e.\nRecord 10005: catalog route /v2/jobs/5 handled 608 entries in 189 milliseconds; retry limit 1, audit key a1c5f5584e30.\nRecord 10006: catalog route /v2/jobs/6 handled 625 entries in 220 milliseconds; retry limit 2, audit key a6c9b0f863d3.\nRecord 10007: catalog route /v2/jobs/7 handled 642 entries in 251 milliseconds; retry limit 3, audit key 9dddde7e9531.\nRecord 10008: catalog route /v2/jobs/8 handled 659 entries in 282 milliseconds; retry limit 4, audit key 39346d4953ad.\nRecord 10009: catalog route /v2/jobs/9 handled 676 entries in 313 milliseconds; retry limit 5, audit key 53a84293ab3f.\nRecord 10010: catalog route /v2/jobs/10 handled 693 entries in 344 milliseconds; retry limit 1, audit key 24dc9bebea86.\nRecord 10011: catalog route /v2/jobs/11 handled 710 entries in 375 milliseconds; retry limit 2, audit key ddf3ff7c110c.\nRecord 10012: catalog route /v2/jobs/12 handled 727 entries in 5 milliseconds; retry limit 3, audit key 3b5d379e5998.\nRecord 10013: catalog route /v2/jobs/13 handled 744 entries in 36 milliseconds; retry limit 4, audit key 5264efea3b46.\nRecord 10014: catalog route /v2/jobs/14 handled 761 entries in 67 milliseconds; retry limit 5, audit key 21049fe0067f.\nRecord 10015: catalog route /v2/jobs/15 handled 778 entries in 98 milliseconds; retry limit 1, audit key b85dfd48ccce.\nRecord 10016: catalog route /v2/jobs/16 handled 795 entries in 129 milliseconds; retry limit 2, audit key 078208096eee.\nRecord 10017: catalog route /v2/jobs/17 handled 812 entries in 160 milliseconds; retry limit 3, audit key 7249e9593890.\nRecord 10018: catalog route /v2/jobs/18 handled 829 entries in 191 milliseconds; retry limit 4, audit key cae0b8d2088e.\nRecord 10019: catalog route /v2/jobs/19 handled 846 entries in 222 milliseconds; retry limit 5, audit key 4ff717d584ed.\nRecord 10020: catalog route /v2/jobs/20 handled 863 entries in 253 milliseconds; retry limit 1, audit key 7741d341a4ef.\nRecord 10021: catalog route /v2/jobs/21 handled 880 entries in 284 milliseconds; retry limit 2, audit key 17eb8859aab8.\nRecord 10022: catalog route /v2/jobs/22 handled 897 entries in 315 milliseconds; retry limit 3, audit key 22167355cff6.\nRecord 10023: catalog route /v2/jobs/23 handled 914 entries in 346 milliseconds; retry l\n\nNow switch to the numerical utility for this project. Write a Python function that returns the n-th Fibonacci number using fast doubling, then give a short proof of the doubling identities. Include input validation and discuss complexity."
+        }
+      ],
+      "max_tokens": 16,
+      "temperature": 0.6,
+      "seed": 42,
+      "cache_prompt": false
+    },
+    "8192": {
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a software engineering assistant. Continue this project conversation, retaining its decisions and constraints. Answer the final request directly."
+        },
+        {
+          "role": "user",
+          "content": "Project review 1: examine these scheduler observations and propose a bounded implementation with stable ordering and explicit error handling.\nRecord 0: scheduler route /v1/jobs/0 handled 13 entries in 7 milliseconds; retry limit 1, audit key 5feceb66ffc8.\nRecord 1: scheduler route /v1/jobs/1 handled 30 entries in 38 milliseconds; retry limit 2, audit key 6b86b273ff34.\nRecord 2: scheduler route /v1/jobs/2 handled 47 entries in 69 milliseconds; retry limit 3, audit key d4735e3a265e.\nRecord 3: scheduler route /v1/jobs/3 handled 64 entries in 100 milliseconds; retry limit 4, audit key 4e07408562be.\nRecord 4: scheduler route /v1/jobs/4 handled 81 entries in 131 milliseconds; retry limit 5, audit key 4b227777d4dd.\nRecord 5: scheduler route /v1/jobs/5 handled 98 entries in 162 milliseconds; retry limit 1, audit key ef2d127de37b.\nRecord 6: scheduler route /v1/jobs/6 handled 115 entries in 193 milliseconds; retry limit 2, audit key e7f6c011776e.\nRecord 7: scheduler route /v1/jobs/7 handled 132 entries in 224 milliseconds; retry limit 3, audit key 7902699be42c.\nRecord 8: scheduler route /v1/jobs/8 handled 149 entries in 255 milliseconds; retry limit 4, audit key 2c624232cdd2.\nRecord 9: scheduler route /v1/jobs/9 handled 166 entries in 286 milliseconds; retry limit 5, audit key 19581e27de7c.\nRecord 10: scheduler route /v1/jobs/10 handled 183 entries in 317 milliseconds; retry limit 1, audit key 4a44dc153642.\nRecord 11: scheduler route /v1/jobs/11 handled 200 entries in 348 milliseconds; retry limit 2, audit key 4fc82b26aecb.\nRecord 12: scheduler route /v1/jobs/12 handled 217 entries in 379 milliseconds; retry limit 3, audit key 6b51d431df5d.\nRecord 13: scheduler route /v1/jobs/13 handled 234 entries in 9 milliseconds; retry limit 4, audit key 3fdba35f04dc.\nRecord 14: scheduler route /v1/jobs/14 handled 251 entries in 40 milliseconds; retry limit 5, audit key 8527a891e224.\nRecord 15: scheduler route /v1/jobs/15 handled 268 entries in 71 milliseconds; retry limit 1, audit key e629fa6598d7.\nRecord 16: scheduler route /v1/jobs/16 handled 285 entries in 102 milliseconds; retry limit 2, audit key b17ef6d19c7a.\nRecord 17: scheduler route /v1/jobs/17 handled 302 entries in 133 milliseconds; retry limit 3, audit key 4523540f1504.\nRecord 18: scheduler route /v1/jobs/18 handled 319 entries in 164 milliseconds; retry limit 4, audit key 4ec9599fc203.\nRecord 19: scheduler route /v1/jobs/19 handled 336 entries in 195 milliseconds; retry limit 5, audit key 9400f1b21cb5.\nRecord 20: scheduler route /v1/jobs/20 handled 353 entries in 226 milliseconds; retry limit 1, audit key f5ca38f748a1.\nRecord 21: scheduler route /v1/jobs/21 handled 370 entries in 257 milliseconds; retry limit 2, audit key 6f4b6612125f.\nRecord 22: scheduler route /v1/jobs/22 handled 387 entries in 288 milliseconds; retry limit 3, audit key 785f3ec7eb32.\nRecord 23: scheduler route /v1/jobs/23 handled 404 entries in 319 milliseconds; retry limit 4, audit key 535fa30d7e25.\nRecord 24: scheduler route /v1/jobs/24 handled 421 entries in 350 milliseconds; retry limit 5, audit key c2356069e9d1.\nRecord 25: scheduler route /v1/jobs/25 handled 438 entries in 381 milliseconds; retry limit 1, audit key b7a56873cd77.\nRecord 26: scheduler route /v1/jobs/26 handled 455 entries in 11 milliseconds; retry limit 2, audit key 5f9c4ab08cac."
+        },
+        {
+          "role": "assistant",
+          "content": "For review 1, keep scheduler work bounded by the configured queue size. Validate identifiers before processing, preserve input order in the result, and record failures separately. Retry transient failures only, using the recorded limit. Never mutate the input collection.\n\nTests should cover empty input, duplicate identifiers, partial failures, and cancellation. Compare the accepted result count against the audit entries before changing concurrency. A timeout should produce a failed item rather than silently discarding the rest of the batch.\n\n```python\ndef collect_0(records):\n    seen = set()\n    output = []\n    for record in records:\n        key = record[\"id\"]\n        if key not in seen:\n            seen.add(key)\n            output.append(record)\n    return output\n```"
+        },
+        {
+          "role": "user",
+          "content": "Additional project review notes:\nProject review 1: examine these scheduler observations and propose a bounded implementation with stable ordering and explicit error handling.\nRecord 0: scheduler route /v1/jobs/0 handled 13 entries in 7 milliseconds; retry limit 1, audit key 5feceb66ffc8.\nRecord 1: scheduler route /v1/jobs/1 handled 30 entries in 38 milliseconds; retry limit 2, audit key 6b86b273ff34.\nRecord 2: scheduler route /v1/jobs/2 handled 47 entries in 69 milliseconds; retry limit 3, audit key d4735e3a265e.\nRecord 3: scheduler route /v1/jobs/3 handled 64 entries in 100 milliseconds; retry limit 4, audit key 4e07408562be.\nRecord 4: scheduler route /v1/jobs/4 handled 81 entries in 131 milliseconds; retry limit 5, audit key 4b227777d4dd.\nRecord 5: scheduler route /v1/jobs/5 handled 98 entries in 162 milliseconds; retry limit 1, audit key ef2d127de37b.\nRecord 6: scheduler route /v1/jobs/6 handled 115 entries in 193 milliseconds; retry limit 2, audit key e7f6c011776e.\nRecord 7: scheduler route /v1/jobs/7 handled 132 entries in 224 milliseconds; retry limit 3, audit key 7902699be42c.\nRecord 8: scheduler route /v1/jobs/8 handled 149 entries in 255 milliseconds; retry limit 4, audit key 2c624232cdd2.\nRecord 9: scheduler route /v1/jobs/9 handled 166 entries in 286 milliseconds; retry limit 5, audit key 19581e27de7c.\nRecord 10: scheduler route /v1/jobs/10 handled 183 entries in 317 milliseconds; retry limit 1, audit key 4a44dc153642.\nRecord 11: scheduler route /v1/jobs/11 handled 200 entries in 348 milliseconds; retry limit 2, audit key 4fc82b26aecb.\nRecord 12: scheduler route /v1/jobs/12 handled 217 entries in 379 milliseconds; retry limit 3, audit key 6b51d431df5d.\nRecord 13: scheduler route /v1/jobs/13 handled 234 entries in 9 milliseconds; retry limit 4, audit key 3fdba35f04dc.\nRecord 14: scheduler route /v1/jobs/14 handled 251 entries in 40 milliseconds; retry limit 5, audit key 8527a891e224.\nRecord 15: scheduler route /v1/jobs/15 handled 268 entries in 71 milliseconds; retry limit 1, audit key e629fa6598d7.\nRecord 16: scheduler route /v1/jobs/16 handled 285 entries in 102 milliseconds; retry limit 2, audit key b17ef6d19c7a.\nRecord 17: scheduler route /v1/jobs/17 handled 302 entries in 133 milliseconds; retry limit 3, audit key 4523540f1504.\nRecord 18: scheduler route /v1/jobs/18 handled 319 entries in 164 milliseconds; retry limit 4, audit key 4ec9599fc203.\nRecord 19: scheduler route /v1/jobs/19 handled 336 entries in 195 milliseconds; retry limit 5, audit key 9400f1b21cb5.\nRecord 20: scheduler route /v1/jobs/20 handled 353 entries in 226 milliseconds; retry limit 1, audit key f5ca38f748a1.\nRecord 21: scheduler route /v1/jobs/21 handled 370 entries in 257 milliseconds; retry limit 2, audit key 6f4b6612125f.\nRecord 22: scheduler route /v1/jobs/22 handled 387 entries in 288 milliseconds; retry limit 3, audit key 785f3ec7eb32.\nRecord 23: scheduler route /v1/jobs/23 handled 404 entries in 319 milliseconds; retry limit 4, audit key 535fa30d7e25.\nRecord 24: scheduler route /v1/jobs/24 handled 421 entries in 350 milliseconds; retry limit 5, audit key c2356069e9d1.\nRecord 25: scheduler route /v1/jobs/25 handled 438 entries in 381 milliseconds; retry limit 1, audit key b7a56873cd77.\nRecord 26: scheduler route /v1/jobs/26 handled 455 entries in 11 milliseconds; retry limit 2, audit key 5f9c4ab08cac.\nProject review 2: examine these catalog observations and propose a bounded implementation with stable ordering and explicit error handling.\nRecord 10000: catalog route /v2/jobs/0 handled 523 entries in 34 milliseconds; retry limit 1, audit key 39e5b4830d4d.\nRecord 10001: catalog route /v2/jobs/1 handled 540 entries in 65 milliseconds; retry limit 2, audit key e443169117a1.\nRecord 10002: catalog route /v2/jobs/2 handled 557 entries in 96 milliseconds; retry limit 3, audit key 56acd2f85500.\nRecord 10003: catalog route /v2/jobs/3 handled 574 entries in 127 milliseconds; retry limit 4, audit key e162e30a5a4c.\nRecord 10004: catalog route /v2/jobs/4 handled 591 entries in 158 milliseconds; retry limit 5, audit key 0d9a5484f79e.\nRecord 10005: catalog route /v2/jobs/5 handled 608 entries in 189 milliseconds; retry limit 1, audit key a1c5f5584e30.\nRecord 10006: catalog route /v2/jobs/6 handled 625 entries in 220 milliseconds; retry limit 2, audit key a6c9b0f863d3.\nRecord 10007: catalog route /v2/jobs/7 handled 642 entries in 251 milliseconds; retry limit 3, audit key 9dddde7e9531.\nRecord 10008: catalog route /v2/jobs/8 handled 659 entries in 282 milliseconds; retry limit 4, audit key 39346d4953ad.\nRecord 10009: catalog route /v2/jobs/9 handled 676 entries in 313 milliseconds; retry limit 5, audit key 53a84293ab3f.\nRecord 10010: catalog route /v2/jobs/10 handled 693 entries in 344 milliseconds; retry limit 1, audit key 24dc9bebea86.\nRecord 10011: catalog route /v2/jobs/11 handled 710 entries in 375 milliseconds; retry limit 2, audit key ddf3ff7c110c.\nRecord 10012: catalog route /v2/jobs/12 handled 727 entries in 5 milliseconds; retry limit 3, audit key 3b5d379e5998.\nRecord 10013: catalog route /v2/jobs/13 handled 744 entries in 36 milliseconds; retry limit 4, audit key 5264efea3b46.\nRecord 10014: catalog route /v2/jobs/14 handled 761 entries in 67 milliseconds; retry limit 5, audit key 21049fe0067f.\nRecord 10015: catalog route /v2/jobs/15 handled 778 entries in 98 milliseconds; retry limit 1, audit key b85dfd48ccce.\nRecord 10016: catalog route /v2/jobs/16 handled 795 entries in 129 milliseconds; retry limit 2, audit key 078208096eee.\nRecord 10017: catalog route /v2/jobs/17 handled 812 entries in 160 milliseconds; retry limit 3, audit key 7249e9593890.\nRecord 10018: catalog route /v2/jobs/18 handled 829 entries in 191 milliseconds; retry limit 4, audit key cae0b8d2088e.\nRecord 10019: catalog route /v2/jobs/19 handled 846 entries in 222 milliseconds; retry limit 5, audit key 4ff717d584ed.\nRecord 10020: catalog route /v2/jobs/20 handled 863 entries in 253 milliseconds; retry limit 1, audit key 7741d341a4ef.\nRecord 10021: catalog route /v2/jobs/21 handled 880 entries in 284 milliseconds; retry limit 2, audit key 17eb8859aab8.\nRecord 10022: catalog route /v2/jobs/22 handled 897 entries in 315 milliseconds; retry limit 3, audit key 22167355cff6.\nRecord 10023: catalog route /v2/jobs/23 handled 914 entries in 346 milliseconds; retry limit 4, audit key 717795fa2f74.\nRecord 10024: catalog route /v2/jobs/24 handled 931 entries in 377 milliseconds; retry limit 5, audit key 8da5c2f12762.\nRecord 10025: catalog route /v2/jobs/25 handled 948 entries in 7 milliseconds; retry limit 1, audit key 544d3f9c0cff.\nRecord 10026: catalog route /v2/jobs/26 handled 965 entries in 38 milliseconds; retry limit 2, audit key 11cc3a859521.\nProject review 3: examine these gateway observations and propose a bounded implementation with stable ordering and explicit error handling.\nRecord 20000: gateway route /v3/jobs/0 handled 36 entries in 61 milliseconds; retry limit 1, audit key 876c9b16254e.\nRecord 20001: gateway route /v3/jobs/1 handled 53 entries in 92 milliseconds; retry limit 2, audit key fc82267b45dc.\nRecord 20002: gateway route /v3/jobs/2 handled 70 entries in 123 milliseconds; retry limit 3, audit key 29433eae6f7f.\nRecord 20003: gateway route /v3/jobs/3 handled 87 entries in 154 milliseconds; retry limit 4, audit key 81efd660a281.\nRecord 20004: gateway route /v3/jobs/4 handled 104 entries in 185 milliseconds; retry limit 5, audit key 41c0d64a0bbd.\nRecord 20005: gateway route /v3/jobs/5 handled 121 entries in 216 milliseconds; retry limit 1, audit key 3efdc9dc584c.\nRecord 20006: gateway route /v3/jobs/6 handled 138 entries in 247 milliseconds; retry limit 2, audit key cc3fefcee849.\nRecord 20007: gateway route /v3/jobs/7 handled 155 entries in 278 milliseconds; retry limit 3, audit key 13f82987984a.\nRecord 20008: gateway route /v3/jobs/8 handled 172 entries in 309 milliseconds; retry limit 4, audit key 8ae6698730d0.\nRecord 20009: gateway route /v3/jobs/9 handled 189 entries in 340 milliseconds; retry limit 5, audit key e58800e32814.\nRecord 20010: gateway route /v3/jobs/10 handled 206 entries in 371 milliseconds; retry limit 1, audit key 971e28bfa6d5.\nRecord 20011: gateway route /v3/jobs/11 handled 223 entries in 1 milliseconds; retry limit 2, audit key e4b8f2da99fd.\nRecord 20012: gateway route /v3/jobs/12 handled 240 entries in 32 milliseconds; retry limit 3, audit key b6167a59dbfd.\nRecord 20013: gateway route /v3/jobs/13 handled 257 entries in 63 milliseconds; retry limit 4, audit key 0cee6209b0c5.\nRecord 20014: gateway route /v3/jobs/14 handled 274 entries in 94 milliseconds; retry limit 5, audit key 5349fe856d45.\nRecord 20015: gateway route /v3/jobs/15 handled 291 entries in 125 milliseconds; retry limit 1, audit key fa86611a1036.\nRecord 20016: gateway route /v3/jobs/16 handled 308 entries in 156 milliseconds; retry limit 2, audit key bc2c79f33e3d.\nRecord 20017: gateway route /v3/jobs/17 handled 325 entries in 187 milliseconds; retry limit 3, audit key 4dbfb70e2008.\nRecord 20018: gateway route /v3/jobs/18 handled 342 entries in 218 milliseconds; retry limit 4, audit key d7144d80be41.\nRecord 20019: gateway route /v3/jobs/19 handled 359 entries in 249 milliseconds; retry limit 5, audit key 4e5faafe665d.\nRecord 20020: gateway route /v3/jobs/20 handled 376 entries in 280 milliseconds; retry limit 1, audit key 3d53a85150dd.\nRecord 20021: gateway route /v3/jobs/21 handled 393 entries in 311 milliseconds; retry limit 2, audit key c291fe829d40.\nRecord 20022: gateway route /v3/jobs/22 handled 410 entries in 342 milliseconds; retry limit 3, audit key c2db217ea7a3.\nRecord 20023: gateway route /v3/jobs/23 handled 427 entries in 373 milliseconds; retry limit 4, audit key 8b6d4c830d3a.\nRecord 20024: gateway route /v3/jobs/24 handled 444 entries in 3 milliseconds; retry limit 5, audit key dd7270edf479.\nRecord 20025: gateway route /v3/jobs/25 handled 461 entries in 34 milliseconds; retry limit 1, audit key 463f716c3478.\nRecord 20026: gateway route /v3/jobs/26 handled 478 entries in 65 milliseconds; retry limit 2, audit key 6c01b9f6a375.\nProject review 4: examine these worker observations and propose a bounded implementation with stable ordering and explicit error handling.\nRecord 30000: worker route /v4/jobs/0 handled 546 entries in 88 milliseconds; retry limit 1, audit key 891937cb3350.\nRecord 30001: worker route /v4/jobs/1 handled 563 entries in 119 milliseconds; retry limit 2, audit key acb6af4c0a66.\nRecord 30002: worker route /v4/jobs/2 handled 580 entries in 150 milliseconds; retry limit 3, audit key 4edd99b2e2a2.\nRecord 30003: worker route /v4/jobs/3 handled 597 entries in 181 milliseconds; retry limit 4, audit key 939a2fb07090.\nRecord 30004: worker route /v4/jobs/4 handled 614 entries in 212 milliseconds; retry limit 5, audit key c7005fcec52b.\nRecord 30005: worker route /v4/jobs/5 handled 631 entries in 243 milliseconds; retry limit 1, audit key 96916536244d.\nRecord 30006: worker route /v4/jobs/6 handled 648 entries in 274 milliseconds; retry limit 2, audit key 229b6a87959f.\nRecord 30007: worker route /v4/jobs/7 handled 665 entries in 305 milliseconds; retry limit 3, audit key e36ec6e3f989.\nRecord 30008: worker route /v4/jobs/8 handled 682 entries in 336 milliseconds; retry limit 4, audit key 31085d0c586d.\nRecord 30009: worker route /v4/jobs/9 handled 699 entries in 367 milliseconds; retry limit 5, audit key 86f8bad8d15f.\nRecord 30010: worker route /v4/jobs/10 handled 716 entries in 398 milliseconds; retry limit 1, audit key 7b877f650cb4.\nRecord 30011: worker route /v4/jobs/11 handled 733 entries in 28 milliseconds; retry limit 2, audit key 584d4212e282.\nRecord 30012: worker route /v4/jobs/12 handled 750 entries in 59 milliseconds; retry limit 3, audit key cdf419bc0044.\nRecord 30013: worker route /v4/jobs/13 handled 767 entries in 90 milliseconds; retry limit 4, audit key 58f25d3f0e33.\nRecord 30014: worker route /v4/jobs/14 handled 784 entries in 121 milliseconds; retry limit 5, audit key 351936934f5c.\nRecord 30015: worker route /v4/jobs/15 handled 801 entries in 152 milliseconds; retry limit 1, audit key 147cda175bbf.\nRecord 30016: worker route /v4/jobs/16 handled 818 entries in 183 milliseconds; retry limit 2, audit key 9477e5e3f8aa.\nRecord 30017: worker route /v4/jobs/17 handled 835 entries in 214 milliseconds; retry limit 3, audit key 28d7434261b6.\nRecord 30018: worker route /v4/jobs/18 handled 852 entries in 245 milliseconds; retry limit 4, audit key b8d1e3869b04.\nRecord 30019: worker route /v4/jobs/19 handled 869 entries in 276 milliseconds; retry limit 5, audit key d7cb8796227e.\nRecord 30020: worker route /v4/jobs/20 handled 886 entries in 307 milliseconds; retry limit 1, audit key 4e1cc11cde42.\nRecord 30021: worker route /v4/jobs/21 handled 903 entries in 338 milliseconds; retry limit 2, audit key cae11f87cacc.\nRecord 30022: worker route /v4/jobs/22 handled 920 entries in 369 milliseconds; retry limit 3, audit key a60ad35a9bde.\nRecord 30023: worker route /v4/jobs/23 handled 937 entries in 400 milliseconds; retry limit 4, audit key b49d9a7ec64a.\nRecord 30024: worker route /v4/jobs/24 handled 954 entries in 30 milliseconds; retry limit 5, audit key 7ba7a77f34af.\nRecord 30025: worker route /v4/jobs/25 handled 971 entries in 61 milliseconds; retry limit 1, audit key 89eea66ba6ad.\nRecord 30026: worker route /v4/jobs/26 handled 988 entries in 92 milliseconds; retry limit 2, audit key 793da1cca60e.\nProject review 5: examine these indexer observations and propose a bounded implementation with stable ordering and explicit error handling.\nRecord 40000: indexer route /v1/jobs/0 handled 59 entries in 115 milliseconds; retry limit 1, audit key 4948963369b6.\nRecord 40001: indexer route /v1/jobs/1 handled 76 entries in 146 milliseconds; retry limit 2, audit key b993c8014a9a.\nRecord 40002: indexer route /v1/jobs/2 handled 93 entries in 177 milliseconds; retry limit 3, audit key d02d78e4d560.\nRecord 40003: indexer route /v1/jobs/3 handled 110 entries in 208 milliseconds; retry limit 4, audit key 81e97dada765.\nRecord 40004: indexer route /v1/jobs/4 handled 127 entries in 239 milliseconds; retry limit 5, audit key c8ffd9e7200f.\nRecord 40005: indexer route /v1/jobs/5 handled 144 entries in 270 milliseconds; retry limit 1, audit key 87f83b208a2c.\nRecord 40006: indexer route /v1/jobs/6 handled 161 entries in 301 milliseconds; retry limit 2, audit key e9c288cb6d75.\nRecord 40007: indexer route /v1/jobs/7 handled 178 entries in 332 milliseconds; retry limit 3, audit key 0cd80490a357.\nRecord 40008: indexer route /v1/jobs/8 handled 195 entries in 363 milliseconds; retry limit 4, audit key 3f97813f32d0.\nRecord 40009: indexer route /v1/jobs/9 handled 212 entries in 394 milliseconds; retry limit 5, audit key 8187946949b2.\nRecord 40010: indexer route /v1/jobs/10 handled 229 entries in 24 milliseconds; retry limit 1, audit key 62bd5bcd7fab.\nRecord 40011: indexer route /v1/jobs/11 handled 246 entries in 55 milliseconds; retry limit 2, audit key 3b8e935e8c7c.\nRecord 40012: indexer route /v1/jobs/12 handled 263 entries in 86 milliseconds; retry limit 3, audit key 42cf283591ff.\nRecord 40013: indexer route /v1/jobs/13 handled 280 entries in 117 milliseconds; retry limit 4, audit key f9f4bd6038b7.\nRecord 40014: indexer route /v1/jobs/14 handled 297 entries in 148 milliseconds; retry limit 5, audit key 78bd85c57724.\nRecord 40015: indexer route /v1/jobs/15 handled 314 entries in 179 milliseconds; retry limit 1, audit key ec7cec1932d9.\nRecord 40016: indexer route /v1/jobs/16 handled 331 entries in 210 milliseconds; retry limit 2, audit key 785f9c325eff.\nRecord 40017: indexer route /v1/jobs/17 handled 348 entries in 241 milliseconds; retry limit 3, audit key 3fcd65d19034.\nRecord 40018: indexer route /v1/jobs/18 handled 365 entries in 272 milliseconds; retry limit 4, audit key d7f9e09ccbe1.\nRecord 40019: indexer route /v1/jobs/19 handled 382 entries in 303 milliseconds; retry limit 5, audit key f08b02a9a28f.\nRecord 40020: indexer route /v1/jobs/20 handled 399 entries in 334 milliseconds; retry limit 1, audit key 72e5b999007a.\nRecord 40021: indexer route /v1/jobs/21 handled 416 entries in 365 milliseconds; retry limit 2, audit key 31abccbb2548.\nRecord 40022: indexer route /v\n\nNow switch to the numerical utility for this project. Write a Python function that returns the n-th Fibonacci number using fast doubling, then give a short proof of the doubling identities. Include input validation and discuss complexity."
+        }
+      ],
+      "max_tokens": 16,
+      "temperature": 0.6,
+      "seed": 42,
+      "cache_prompt": false
+    }
+  },
+  "cases": {
+    "baseline": {
+      "command": {
+        "argv": [
+          "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\build-rocm\\bin\\llama-server.exe",
+          "-m",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-UD-IQ2_XXS.gguf",
+          "--model-draft",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-DSpine-b16-Q4_K_M.gguf",
+          "-np",
+          "1",
+          "-lv",
+          "4",
+          "--n-gpu-layers",
+          "all",
+          "--load-mode",
+          "none",
+          "-fa",
+          "on",
+          "-t",
+          "8",
+          "-b",
+          "2048",
+          "-ub",
+          "512",
+          "--cache-type-k",
+          "q4_0",
+          "--cache-type-v",
+          "q4_0",
+          "--ctx-size",
+          "131072",
+          "--temp",
+          "0.6",
+          "--top-p",
+          "0.95",
+          "--top-k",
+          "20",
+          "--min-p",
+          "0.0",
+          "--presence-penalty",
+          "0.0",
+          "--repeat-penalty",
+          "1.0",
+          "--reasoning",
+          "on",
+          "--reasoning-effort",
+          "low",
+          "--jinja",
+          "--chat-template-kwargs",
+          "{\"reasoning_effort\":\"low\"}",
+          "--spec-type",
+          "draft-dflash",
+          "--spec-draft-n-max",
+          "6",
+          "--spec-draft-type-k",
+          "f16",
+          "--spec-draft-type-v",
+          "f16",
+          "--spec-draft-n-ubatch",
+          "32",
+          "-n",
+          "-1",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "9092",
+          "--alias",
+          "Qwen3.8-27B-UD-IQ2_XXS"
+        ],
+        "environment": {
+          "LLAMA_MODELS_PATH": "D:\\models"
+        }
+      },
+      "metrics": [
+        {
+          "case": "baseline",
+          "size_requested": 4096,
+          "size_tokenizer": 4096,
+          "repeat": 1,
+          "wall_seconds": 11.635331800003769,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 4096,
+            "prompt_ms": 10592.201,
+            "prompt_per_token_ms": 2.585986572265625,
+            "prompt_per_second": 386.6996104020307,
+            "predicted_n": 16,
+            "predicted_ms": 1015.693,
+            "predicted_per_token_ms": 67.71286666666667,
+            "predicted_per_second": 14.76824197862937,
+            "draft_n": 12,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 4096,
+            "total_tokens": 4112,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        },
+        {
+          "case": "baseline",
+          "size_requested": 4096,
+          "size_tokenizer": 4096,
+          "repeat": 2,
+          "wall_seconds": 14.66815889999998,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 4096,
+            "prompt_ms": 14312.253,
+            "prompt_per_token_ms": 3.494202392578125,
+            "prompt_per_second": 286.18834504951803,
+            "predicted_n": 16,
+            "predicted_ms": 261.608,
+            "predicted_per_token_ms": 17.440533333333335,
+            "predicted_per_second": 57.337696094920645,
+            "draft_n": 12,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 4096,
+            "total_tokens": 4112,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        },
+        {
+          "case": "baseline",
+          "size_requested": 8192,
+          "size_tokenizer": 8192,
+          "repeat": 1,
+          "wall_seconds": 24.702467300005083,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 8192,
+            "prompt_ms": 24332.044,
+            "prompt_per_token_ms": 2.97022021484375,
+            "prompt_per_second": 336.67537342937567,
+            "predicted_n": 16,
+            "predicted_ms": 349.404,
+            "predicted_per_token_ms": 23.2936,
+            "predicted_per_second": 42.93024693478037,
+            "draft_n": 13,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 8192,
+            "total_tokens": 8208,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        },
+        {
+          "case": "baseline",
+          "size_requested": 8192,
+          "size_tokenizer": 8192,
+          "repeat": 2,
+          "wall_seconds": 29.587937299998885,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 8192,
+            "prompt_ms": 29197.906,
+            "prompt_per_token_ms": 3.564197509765625,
+            "prompt_per_second": 280.5680653948266,
+            "predicted_n": 16,
+            "predicted_ms": 382.285,
+            "predicted_per_token_ms": 25.485666666666667,
+            "predicted_per_second": 39.23774147560066,
+            "draft_n": 13,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 8192,
+            "total_tokens": 8208,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        }
+      ]
+    },
+    "baselinepost": {
+      "command": {
+        "argv": [
+          "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\build-rocm\\bin\\llama-server.exe",
+          "-m",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-UD-IQ2_XXS.gguf",
+          "--model-draft",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-DSpine-b16-Q4_K_M.gguf",
+          "-np",
+          "1",
+          "-lv",
+          "4",
+          "--n-gpu-layers",
+          "all",
+          "--load-mode",
+          "none",
+          "-fa",
+          "on",
+          "-t",
+          "8",
+          "-b",
+          "2048",
+          "-ub",
+          "512",
+          "--cache-type-k",
+          "q4_0",
+          "--cache-type-v",
+          "q4_0",
+          "--ctx-size",
+          "131072",
+          "--temp",
+          "0.6",
+          "--top-p",
+          "0.95",
+          "--top-k",
+          "20",
+          "--min-p",
+          "0.0",
+          "--presence-penalty",
+          "0.0",
+          "--repeat-penalty",
+          "1.0",
+          "--reasoning",
+          "on",
+          "--reasoning-effort",
+          "low",
+          "--jinja",
+          "--chat-template-kwargs",
+          "{\"reasoning_effort\":\"low\"}",
+          "--spec-type",
+          "draft-dflash",
+          "--spec-draft-n-max",
+          "6",
+          "--spec-draft-type-k",
+          "f16",
+          "--spec-draft-type-v",
+          "f16",
+          "--spec-draft-n-ubatch",
+          "32",
+          "-n",
+          "-1",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "9092",
+          "--alias",
+          "Qwen3.8-27B-UD-IQ2_XXS"
+        ],
+        "environment": {
+          "LLAMA_MODELS_PATH": "D:\\models"
+        }
+      },
+      "metrics": [
+        {
+          "case": "baselinepost",
+          "size_requested": 4096,
+          "size_tokenizer": 4096,
+          "repeat": 1,
+          "wall_seconds": 11.809697100004996,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 4096,
+            "prompt_ms": 10811.251,
+            "prompt_per_token_ms": 2.639465576171875,
+            "prompt_per_second": 378.86457358172515,
+            "predicted_n": 16,
+            "predicted_ms": 993.353,
+            "predicted_per_token_ms": 66.22353333333334,
+            "predicted_per_second": 15.100372173839512,
+            "draft_n": 12,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 4096,
+            "total_tokens": 4112,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        },
+        {
+          "case": "baselinepost",
+          "size_requested": 8192,
+          "size_tokenizer": 8192,
+          "repeat": 1,
+          "wall_seconds": 24.90687959999923,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 8192,
+            "prompt_ms": 24516.826,
+            "prompt_per_token_ms": 2.992776611328125,
+            "prompt_per_second": 334.1378692331544,
+            "predicted_n": 16,
+            "predicted_ms": 360.883,
+            "predicted_per_token_ms": 24.058866666666667,
+            "predicted_per_second": 41.564717650873,
+            "draft_n": 13,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 8192,
+            "total_tokens": 8208,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        }
+      ]
+    },
+    "smallctx": {
+      "command": {
+        "argv": [
+          "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\build-rocm\\bin\\llama-server.exe",
+          "-m",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-UD-IQ2_XXS.gguf",
+          "--model-draft",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-DSpine-b16-Q4_K_M.gguf",
+          "-np",
+          "1",
+          "-lv",
+          "4",
+          "--n-gpu-layers",
+          "all",
+          "--load-mode",
+          "none",
+          "-fa",
+          "on",
+          "-t",
+          "8",
+          "-b",
+          "2048",
+          "-ub",
+          "512",
+          "--cache-type-k",
+          "q4_0",
+          "--cache-type-v",
+          "q4_0",
+          "--ctx-size",
+          "131072",
+          "--temp",
+          "0.6",
+          "--top-p",
+          "0.95",
+          "--top-k",
+          "20",
+          "--min-p",
+          "0.0",
+          "--presence-penalty",
+          "0.0",
+          "--repeat-penalty",
+          "1.0",
+          "--reasoning",
+          "on",
+          "--reasoning-effort",
+          "low",
+          "--jinja",
+          "--chat-template-kwargs",
+          "{\"reasoning_effort\":\"low\"}",
+          "--spec-type",
+          "draft-dflash",
+          "--spec-draft-n-max",
+          "6",
+          "--spec-draft-type-k",
+          "f16",
+          "--spec-draft-type-v",
+          "f16",
+          "--spec-draft-n-ubatch",
+          "32",
+          "-n",
+          "-1",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "9092",
+          "--alias",
+          "Qwen3.8-27B-UD-IQ2_XXS",
+          "--ctx-size",
+          "16384"
+        ],
+        "environment": {
+          "LLAMA_MODELS_PATH": "D:\\models"
+        }
+      },
+      "metrics": [
+        {
+          "case": "smallctx",
+          "size_requested": 4096,
+          "size_tokenizer": 4096,
+          "repeat": 1,
+          "wall_seconds": 8.758579900000768,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 4096,
+            "prompt_ms": 7796.182,
+            "prompt_per_token_ms": 1.90336474609375,
+            "prompt_per_second": 525.3853745333292,
+            "predicted_n": 16,
+            "predicted_ms": 933.633,
+            "predicted_per_token_ms": 62.242200000000004,
+            "predicted_per_second": 16.066270151119337,
+            "draft_n": 12,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 4096,
+            "total_tokens": 4112,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        },
+        {
+          "case": "smallctx",
+          "size_requested": 4096,
+          "size_tokenizer": 4096,
+          "repeat": 2,
+          "wall_seconds": 7.030999399998109,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 4096,
+            "prompt_ms": 6716.368,
+            "prompt_per_token_ms": 1.63973828125,
+            "prompt_per_second": 609.8534207774202,
+            "predicted_n": 16,
+            "predicted_ms": 207.32,
+            "predicted_per_token_ms": 13.821333333333333,
+            "predicted_per_second": 72.35191973760371,
+            "draft_n": 12,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 4096,
+            "total_tokens": 4112,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        },
+        {
+          "case": "smallctx",
+          "size_requested": 8192,
+          "size_tokenizer": 8192,
+          "repeat": 1,
+          "wall_seconds": 14.022710900004313,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 8192,
+            "prompt_ms": 13744.783,
+            "prompt_per_token_ms": 1.6778299560546874,
+            "prompt_per_second": 596.0079544362396,
+            "predicted_n": 16,
+            "predicted_ms": 254.376,
+            "predicted_per_token_ms": 16.9584,
+            "predicted_per_second": 58.96782715350504,
+            "draft_n": 13,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 8192,
+            "total_tokens": 8208,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        },
+        {
+          "case": "smallctx",
+          "size_requested": 8192,
+          "size_tokenizer": 8192,
+          "repeat": 2,
+          "wall_seconds": 13.732429800002137,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 8192,
+            "prompt_ms": 13447.991,
+            "prompt_per_token_ms": 1.6416004638671875,
+            "prompt_per_second": 609.1616212414182,
+            "predicted_n": 16,
+            "predicted_ms": 254.732,
+            "predicted_per_token_ms": 16.982133333333334,
+            "predicted_per_second": 58.88541683023727,
+            "draft_n": 13,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 8192,
+            "total_tokens": 8208,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        }
+      ]
+    },
+    "targetonly": {
+      "command": {
+        "argv": [
+          "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\build-rocm\\bin\\llama-server.exe",
+          "-m",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-UD-IQ2_XXS.gguf",
+          "-np",
+          "1",
+          "-lv",
+          "4",
+          "--n-gpu-layers",
+          "all",
+          "--load-mode",
+          "none",
+          "-fa",
+          "on",
+          "-t",
+          "8",
+          "-b",
+          "2048",
+          "-ub",
+          "512",
+          "--cache-type-k",
+          "q4_0",
+          "--cache-type-v",
+          "q4_0",
+          "--ctx-size",
+          "131072",
+          "--temp",
+          "0.6",
+          "--top-p",
+          "0.95",
+          "--top-k",
+          "20",
+          "--min-p",
+          "0.0",
+          "--presence-penalty",
+          "0.0",
+          "--repeat-penalty",
+          "1.0",
+          "--reasoning",
+          "on",
+          "--reasoning-effort",
+          "low",
+          "--jinja",
+          "--chat-template-kwargs",
+          "{\"reasoning_effort\":\"low\"}",
+          "-n",
+          "-1",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "9092",
+          "--alias",
+          "Qwen3.8-27B-UD-IQ2_XXS",
+          "--spec-type",
+          "none"
+        ],
+        "environment": {
+          "LLAMA_MODELS_PATH": "D:\\models"
+        }
+      },
+      "metrics": [
+        {
+          "case": "targetonly",
+          "size_requested": 4096,
+          "size_tokenizer": 4096,
+          "repeat": 1,
+          "wall_seconds": 8.03524599999946,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 4096,
+            "prompt_ms": 7480.952,
+            "prompt_per_token_ms": 1.826404296875,
+            "prompt_per_second": 547.5238980279515,
+            "predicted_n": 16,
+            "predicted_ms": 549.135,
+            "predicted_per_token_ms": 36.609,
+            "predicted_per_second": 27.3156873992734
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 4096,
+            "total_tokens": 4112,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        },
+        {
+          "case": "targetonly",
+          "size_requested": 8192,
+          "size_tokenizer": 8192,
+          "repeat": 1,
+          "wall_seconds": 13.565335600003891,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 8192,
+            "prompt_ms": 12981.904,
+            "prompt_per_token_ms": 1.584705078125,
+            "prompt_per_second": 631.0322430361524,
+            "predicted_n": 16,
+            "predicted_ms": 560.648,
+            "predicted_per_token_ms": 37.376533333333334,
+            "predicted_per_second": 26.754755211826314
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 8192,
+            "total_tokens": 8208,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        }
+      ]
+    },
+    "eager": {
+      "command": {
+        "argv": [
+          "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\build-rocm\\bin\\llama-server.exe",
+          "-m",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-UD-IQ2_XXS.gguf",
+          "--model-draft",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-DSpine-b16-Q4_K_M.gguf",
+          "-np",
+          "1",
+          "-lv",
+          "4",
+          "--n-gpu-layers",
+          "all",
+          "--load-mode",
+          "none",
+          "-fa",
+          "on",
+          "-t",
+          "8",
+          "-b",
+          "2048",
+          "-ub",
+          "512",
+          "--cache-type-k",
+          "q4_0",
+          "--cache-type-v",
+          "q4_0",
+          "--ctx-size",
+          "131072",
+          "--temp",
+          "0.6",
+          "--top-p",
+          "0.95",
+          "--top-k",
+          "20",
+          "--min-p",
+          "0.0",
+          "--presence-penalty",
+          "0.0",
+          "--repeat-penalty",
+          "1.0",
+          "--reasoning",
+          "on",
+          "--reasoning-effort",
+          "low",
+          "--jinja",
+          "--chat-template-kwargs",
+          "{\"reasoning_effort\":\"low\"}",
+          "--spec-type",
+          "draft-dflash",
+          "--spec-draft-n-max",
+          "6",
+          "--spec-draft-type-k",
+          "f16",
+          "--spec-draft-type-v",
+          "f16",
+          "--spec-draft-n-ubatch",
+          "32",
+          "-n",
+          "-1",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "9092",
+          "--alias",
+          "Qwen3.8-27B-UD-IQ2_XXS"
+        ],
+        "environment": {
+          "LLAMA_MODELS_PATH": "D:\\models",
+          "LLAMA_GRAPH_RESERVE_FULL": "1"
+        }
+      },
+      "metrics": [
+        {
+          "case": "eager",
+          "size_requested": 4096,
+          "size_tokenizer": 4096,
+          "repeat": 1,
+          "wall_seconds": 16.3245734000011,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 4096,
+            "prompt_ms": 15299.919,
+            "prompt_per_token_ms": 3.735331787109375,
+            "prompt_per_second": 267.71383560919503,
+            "predicted_n": 16,
+            "predicted_ms": 1002.831,
+            "predicted_per_token_ms": 66.8554,
+            "predicted_per_second": 14.957654879037445,
+            "draft_n": 12,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 4096,
+            "total_tokens": 4112,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        },
+        {
+          "case": "eager",
+          "size_requested": 8192,
+          "size_tokenizer": 8192,
+          "repeat": 1,
+          "wall_seconds": 29.663435200003732,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 8192,
+            "prompt_ms": 29296.046,
+            "prompt_per_token_ms": 3.576177490234375,
+            "prompt_per_second": 279.6281791747596,
+            "predicted_n": 16,
+            "predicted_ms": 336.324,
+            "predicted_per_token_ms": 22.4216,
+            "predicted_per_second": 44.59985014450351,
+            "draft_n": 13,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 8192,
+            "total_tokens": 8208,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        }
+      ]
+    },
+    "draft512": {
+      "command": {
+        "argv": [
+          "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\build-rocm\\bin\\llama-server.exe",
+          "-m",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-UD-IQ2_XXS.gguf",
+          "--model-draft",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-DSpine-b16-Q4_K_M.gguf",
+          "-np",
+          "1",
+          "-lv",
+          "4",
+          "--n-gpu-layers",
+          "all",
+          "--load-mode",
+          "none",
+          "-fa",
+          "on",
+          "-t",
+          "8",
+          "-b",
+          "2048",
+          "-ub",
+          "512",
+          "--cache-type-k",
+          "q4_0",
+          "--cache-type-v",
+          "q4_0",
+          "--ctx-size",
+          "131072",
+          "--temp",
+          "0.6",
+          "--top-p",
+          "0.95",
+          "--top-k",
+          "20",
+          "--min-p",
+          "0.0",
+          "--presence-penalty",
+          "0.0",
+          "--repeat-penalty",
+          "1.0",
+          "--reasoning",
+          "on",
+          "--reasoning-effort",
+          "low",
+          "--jinja",
+          "--chat-template-kwargs",
+          "{\"reasoning_effort\":\"low\"}",
+          "--spec-type",
+          "draft-dflash",
+          "--spec-draft-n-max",
+          "6",
+          "--spec-draft-type-k",
+          "f16",
+          "--spec-draft-type-v",
+          "f16",
+          "--spec-draft-n-ubatch",
+          "32",
+          "-n",
+          "-1",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "9092",
+          "--alias",
+          "Qwen3.8-27B-UD-IQ2_XXS",
+          "--spec-draft-n-ubatch",
+          "512"
+        ],
+        "environment": {
+          "LLAMA_MODELS_PATH": "D:\\models"
+        }
+      },
+      "metrics": [
+        {
+          "case": "draft512",
+          "size_requested": 4096,
+          "size_tokenizer": 4096,
+          "repeat": 1,
+          "wall_seconds": 13.717923500000325,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 4096,
+            "prompt_ms": 12673.629,
+            "prompt_per_token_ms": 3.094147705078125,
+            "prompt_per_second": 323.19077669071737,
+            "predicted_n": 16,
+            "predicted_ms": 1039.301,
+            "predicted_per_token_ms": 69.28673333333333,
+            "predicted_per_second": 14.432777414820155,
+            "draft_n": 12,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 4096,
+            "total_tokens": 4112,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        },
+        {
+          "case": "draft512",
+          "size_requested": 8192,
+          "size_tokenizer": 8192,
+          "repeat": 1,
+          "wall_seconds": 26.878483500004222,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 8192,
+            "prompt_ms": 26503.159,
+            "prompt_per_token_ms": 3.2352489013671875,
+            "prompt_per_second": 309.0952289876086,
+            "predicted_n": 16,
+            "predicted_ms": 347.051,
+            "predicted_per_token_ms": 23.136733333333332,
+            "predicted_per_second": 43.221313294011544,
+            "draft_n": 13,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 8192,
+            "total_tokens": 8208,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        }
+      ]
+    },
+    "nocheckpoints": {
+      "command": {
+        "argv": [
+          "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\build-rocm\\bin\\llama-server.exe",
+          "-m",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-UD-IQ2_XXS.gguf",
+          "--model-draft",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-DSpine-b16-Q4_K_M.gguf",
+          "-np",
+          "1",
+          "-lv",
+          "4",
+          "--n-gpu-layers",
+          "all",
+          "--load-mode",
+          "none",
+          "-fa",
+          "on",
+          "-t",
+          "8",
+          "-b",
+          "2048",
+          "-ub",
+          "512",
+          "--cache-type-k",
+          "q4_0",
+          "--cache-type-v",
+          "q4_0",
+          "--ctx-size",
+          "131072",
+          "--temp",
+          "0.6",
+          "--top-p",
+          "0.95",
+          "--top-k",
+          "20",
+          "--min-p",
+          "0.0",
+          "--presence-penalty",
+          "0.0",
+          "--repeat-penalty",
+          "1.0",
+          "--reasoning",
+          "on",
+          "--reasoning-effort",
+          "low",
+          "--jinja",
+          "--chat-template-kwargs",
+          "{\"reasoning_effort\":\"low\"}",
+          "--spec-type",
+          "draft-dflash",
+          "--spec-draft-n-max",
+          "6",
+          "--spec-draft-type-k",
+          "f16",
+          "--spec-draft-type-v",
+          "f16",
+          "--spec-draft-n-ubatch",
+          "32",
+          "-n",
+          "-1",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "9092",
+          "--alias",
+          "Qwen3.8-27B-UD-IQ2_XXS",
+          "--ctx-checkpoints",
+          "0"
+        ],
+        "environment": {
+          "LLAMA_MODELS_PATH": "D:\\models"
+        }
+      },
+      "metrics": [
+        {
+          "case": "nocheckpoints",
+          "size_requested": 4096,
+          "size_tokenizer": 4096,
+          "repeat": 1,
+          "wall_seconds": 12.468061899999157,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 4096,
+            "prompt_ms": 11236.969,
+            "prompt_per_token_ms": 2.743400634765625,
+            "prompt_per_second": 364.5111061532696,
+            "predicted_n": 16,
+            "predicted_ms": 1225.01,
+            "predicted_per_token_ms": 81.66733333333333,
+            "predicted_per_second": 12.244798001648967,
+            "draft_n": 20,
+            "draft_n_accepted": 11
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 4096,
+            "total_tokens": 4112,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "610424f0c907f52b097695569906c945c228c7070eb915e27d13a4d97c95db58"
+        },
+        {
+          "case": "nocheckpoints",
+          "size_requested": 8192,
+          "size_tokenizer": 8192,
+          "repeat": 1,
+          "wall_seconds": 26.614347000002454,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 8192,
+            "prompt_ms": 25886.376,
+            "prompt_per_token_ms": 3.1599580078125,
+            "prompt_per_second": 316.45990153275994,
+            "predicted_n": 16,
+            "predicted_ms": 719.783,
+            "predicted_per_token_ms": 47.985533333333336,
+            "predicted_per_second": 20.83961416149034,
+            "draft_n": 28,
+            "draft_n_accepted": 9
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 8192,
+            "total_tokens": 8208,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "91fdea517c41af230677790b4311ef22c43466927ed57c32fa930a1f15884219"
+        }
+      ]
+    },
+    "profile": {
+      "command": {
+        "argv": [
+          "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\build-rocm\\bin\\llama-server.exe",
+          "-m",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-UD-IQ2_XXS.gguf",
+          "--model-draft",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-DSpine-b16-Q4_K_M.gguf",
+          "-np",
+          "1",
+          "-lv",
+          "4",
+          "--n-gpu-layers",
+          "all",
+          "--load-mode",
+          "none",
+          "-fa",
+          "on",
+          "-t",
+          "8",
+          "-b",
+          "2048",
+          "-ub",
+          "512",
+          "--cache-type-k",
+          "q4_0",
+          "--cache-type-v",
+          "q4_0",
+          "--ctx-size",
+          "131072",
+          "--temp",
+          "0.6",
+          "--top-p",
+          "0.95",
+          "--top-k",
+          "20",
+          "--min-p",
+          "0.0",
+          "--presence-penalty",
+          "0.0",
+          "--repeat-penalty",
+          "1.0",
+          "--reasoning",
+          "on",
+          "--reasoning-effort",
+          "low",
+          "--jinja",
+          "--chat-template-kwargs",
+          "{\"reasoning_effort\":\"low\"}",
+          "--spec-type",
+          "draft-dflash",
+          "--spec-draft-n-max",
+          "6",
+          "--spec-draft-type-k",
+          "f16",
+          "--spec-draft-type-v",
+          "f16",
+          "--spec-draft-n-ubatch",
+          "32",
+          "-n",
+          "-1",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "9092",
+          "--alias",
+          "Qwen3.8-27B-UD-IQ2_XXS"
+        ],
+        "environment": {
+          "LLAMA_MODELS_PATH": "D:\\models",
+          "GGML_CUDA_CLIFF_PROFILE": "1",
+          "GGML_CUDA_CLIFF_OPS": "1"
+        }
+      },
+      "metrics": [
+        {
+          "case": "profile",
+          "size_requested": 4096,
+          "size_tokenizer": 4096,
+          "repeat": 1,
+          "wall_seconds": 15.211612099999911,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 4096,
+            "prompt_ms": 13695.102,
+            "prompt_per_token_ms": 3.34353076171875,
+            "prompt_per_second": 299.08503054595724,
+            "predicted_n": 16,
+            "predicted_ms": 1511.723,
+            "predicted_per_token_ms": 100.78153333333333,
+            "predicted_per_second": 9.922452724473994,
+            "draft_n": 12,
+            "draft_n_accepted": 12
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 4096,
+            "total_tokens": 4112,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        }
+      ],
+      "profile": {
+        "note": "Intrusive serialized operation intervals from request start to sampler initialization; excludes startup and final small prompt tail. Fusion groups attributed to first node. Event intervals include dispatch gaps.",
+        "by_op": {
+          "MUL_MAT": [
+            6989,
+            7991.664999999989,
+            829.4479999999828,
+            7321.135299999958
+          ],
+          "RMS_NORM": [
+            3804,
+            812.2579999999998,
+            13.474000000000347,
+            447.95020000000045
+          ],
+          "GLU": [
+            630,
+            737.3419999999998,
+            2.3079999999999794,
+            663.3012999999999
+          ],
+          "ADD": [
+            1740,
+            561.8210000000005,
+            6.395999999999883,
+            382.11630000000065
+          ],
+          "GATED_DELTA_NET": [
+            480,
+            485.57900000000006,
+            1.5359999999999931,
+            451.53860000000003
+          ],
+          "FLASH_ATTN_EXT": [
+            160,
+            484.90999999999997,
+            9.690000000000005,
+            472.4591999999999
+          ],
+          "CONCAT": [
+            480,
+            401.6809999999999,
+            1.7209999999999925,
+            350.0776000000001
+          ],
+          "SSM_CONV": [
+            480,
+            375.0259999999997,
+            1.4769999999999943,
+            339.24269999999984
+          ],
+          "UNARY": [
+            1600,
+            374.4180000000012,
+            5.435999999999912,
+            231.00149999999928
+          ],
+          "SET_ROWS": [
+            1495,
+            160.06499999999969,
+            4.227999999999907,
+            44.38129999999987
+          ],
+          "ROPE": [
+            965,
+            116.97399999999946,
+            2.740999999999948,
+            39.36900000000036
+          ],
+          "GET_ROWS": [
+            1089,
+            101.24899999999968,
+            4.209999999999962,
+            9.486900000000041
+          ],
+          "CONT": [
+            160,
+            68.492,
+            0.6260000000000004,
+            52.01159999999998
+          ],
+          "SCALE": [
+            576,
+            54.480000000000054,
+            1.9209999999999907,
+            5.8972000000000095
+          ],
+          "ARANGE": [
+            480,
+            50.555000000000014,
+            1.551999999999995,
+            2.356000000000001
+          ],
+          "CPY": [
+            480,
+            42.1280000000001,
+            1.3439999999999948,
+            3.2962999999999996
+          ],
+          "MUL": [
+            480,
+            41.036,
+            1.620999999999994,
+            3.0152999999999976
+          ]
+        },
+        "top_groups": [
+          {
+            "name_op_shape": [
+              "ffn_out",
+              "MUL_MAT",
+              "5120,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              441,
+              1276.2690000000014,
+              3.9229999999999796,
+              1222.4593000000002
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_gate",
+              "MUL_MAT",
+              "17408,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              441,
+              1183.6419999999996,
+              95.87500000000013,
+              1136.025800000001
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_up",
+              "MUL_MAT",
+              "17408,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              441,
+              1143.3400000000001,
+              3.9099999999999837,
+              1087.4219
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_swiglu",
+              "GLU",
+              "17408,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              441,
+              690.9129999999994,
+              1.6469999999999925,
+              635.0517
+            ]
+          },
+          {
+            "name_op_shape": [
+              "node_76",
+              "MUL_MAT",
+              "10240,55,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              1,
+              594.938,
+              593.462,
+              594.6644
+            ]
+          },
+          {
+            "name_op_shape": [
+              "Qcur_full",
+              "MUL_MAT",
+              "12288,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              112,
+              552.6170000000003,
+              1.9889999999999954,
+              537.9371999999998
+            ]
+          },
+          {
+            "name_op_shape": [
+              "linear_attn_out",
+              "MUL_MAT",
+              "5120,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              336,
+              399.375,
+              2.823999999999988,
+              361.31449999999995
+            ]
+          },
+          {
+            "name_op_shape": [
+              "z",
+              "MUL_MAT",
+              "6144,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              336,
+              378.8990000000001,
+              3.826999999999986,
+              335.84749999999974
+            ]
+          },
+          {
+            "name_op_shape": [
+              "conv_input",
+              "CONCAT",
+              "515,10240,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              336,
+              368.0909999999999,
+              1.1889999999999987,
+              329.4128000000001
+            ]
+          },
+          {
+            "name_op_shape": [
+              "conv_output_raw",
+              "SSM_CONV",
+              "10240,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              336,
+              352.98699999999985,
+              1.0100000000000007,
+              328.1504
+            ]
+          },
+          {
+            "name_op_shape": [
+              "norm",
+              "RMS_NORM",
+              "5120,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              889,
+              304.0000000000002,
+              3.663999999999981,
+              205.36120000000008
+            ]
+          },
+          {
+            "name_op_shape": [
+              "l_out",
+              "ADD",
+              "5120,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              441,
+              238.48099999999997,
+              1.8829999999999905,
+              182.8616
+            ]
+          },
+          {
+            "name_op_shape": [
+              "attn_residual",
+              "ADD",
+              "5120,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              441,
+              228.68099999999984,
+              1.6029999999999933,
+              179.84679999999994
+            ]
+          },
+          {
+            "name_op_shape": [
+              "norm",
+              "RMS_NORM",
+              "128,48,512,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              336,
+              134.26400000000004,
+              1.1979999999999982,
+              100.2353
+            ]
+          },
+          {
+            "name_op_shape": [
+              "attn_output",
+              "MUL_MAT",
+              "5120,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              112,
+              130.96200000000002,
+              1.7069999999999976,
+              119.0745
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_out",
+              "MUL_MAT",
+              "5120,442,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              63,
+              125.74800000000002,
+              0.5860000000000003,
+              119.84219999999998
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_up",
+              "MUL_MAT",
+              "17408,442,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              63,
+              122.61900000000001,
+              0.49000000000000016,
+              116.28069999999998
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_gate",
+              "MUL_MAT",
+              "17408,442,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              63,
+              115.96399999999997,
+              0.6070000000000003,
+              110.99559999999998
+            ]
+          },
+          {
+            "name_op_shape": [
+              "Vcur",
+              "MUL_MAT",
+              "1024,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              112,
+              82.682,
+              1.0400000000000005,
+              70.25689999999997
+            ]
+          },
+          {
+            "name_op_shape": [
+              "Kcur",
+              "MUL_MAT",
+              "1024,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              112,
+              78.21000000000002,
+              0.8520000000000006,
+              66.77020000000002
+            ]
+          },
+          {
+            "name_op_shape": [
+              "gate_sigmoid",
+              "UNARY",
+              "6144,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              112,
+              65.96400000000001,
+              0.47500000000000037,
+              53.434999999999995
+            ]
+          },
+          {
+            "name_op_shape": [
+              "Qcur_full",
+              "MUL_MAT",
+              "12288,442,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              16,
+              63.327,
+              0.11900000000000005,
+              62.11000000000001
+            ]
+          },
+          {
+            "name_op_shape": [
+              "gate_reshaped",
+              "CONT",
+              "6144,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              112,
+              60.11300000000002,
+              0.44200000000000034,
+              47.49989999999999
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_gate",
+              "MUL_MAT",
+              "17408,55,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              63,
+              55.335000000000015,
+              12.827999999999998,
+              49.9981
+            ]
+          },
+          {
+            "name_op_shape": [
+              "norm",
+              "RMS_NORM",
+              "256,24,512,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              112,
+              52.96499999999998,
+              0.4990000000000004,
+              39.412000000000006
+            ]
+          }
+        ],
+        "graphs_count_elapsed_ms": {
+          "3910": [
+            10,
+            12583.333000000002
+          ],
+          "59": [
+            129,
+            410.71899999999994
+          ]
+        },
+        "matmul_columns_count_wall_ms": {
+          "55": [
+            493,
+            904.942
+          ],
+          "1320": [
+            16,
+            1.5020000000000002
+          ],
+          "880": [
+            16,
+            1.6380000000000001
+          ],
+          "220": [
+            16,
+            1.3259999999999998
+          ],
+          "5280": [
+            16,
+            2.78
+          ],
+          "32": [
+            1386,
+            206.64799999999997
+          ],
+          "23": [
+            11,
+            2.052
+          ],
+          "512": [
+            3451,
+            5996.488000000005
+          ],
+          "12288": [
+            112,
+            42.368
+          ],
+          "8192": [
+            112,
+            17.962999999999997
+          ],
+          "2048": [
+            112,
+            17.276000000000003
+          ],
+          "49152": [
+            112,
+            44.763999999999996
+          ],
+          "442": [
+            493,
+            607.0429999999999
+          ],
+          "10608": [
+            16,
+            1.8260000000000003
+          ],
+          "7072": [
+            16,
+            1.464
+          ],
+          "1768": [
+            16,
+            1.3409999999999997
+          ],
+          "42432": [
+            16,
+            2.188
+          ],
+          "26": [
+            11,
+            1.4000000000000001
+          ],
+          "11": [
+            504,
+            130.4619999999999
+          ],
+          "264": [
+            16,
+            1.5970000000000002
+          ],
+          "176": [
+            16,
+            1.354
+          ],
+          "44": [
+            16,
+            1.2519999999999998
+          ],
+          "1056": [
+            16,
+            1.991
+          ]
+        }
+      }
+    },
+    "targetprofile": {
+      "command": {
+        "argv": [
+          "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\build-rocm\\bin\\llama-server.exe",
+          "-m",
+          "D:\\40-49 Assets\\44 AI Models\\Qwen3.8-27B-UD-IQ2_XXS.gguf",
+          "-np",
+          "1",
+          "-lv",
+          "4",
+          "--n-gpu-layers",
+          "all",
+          "--load-mode",
+          "none",
+          "-fa",
+          "on",
+          "-t",
+          "8",
+          "-b",
+          "2048",
+          "-ub",
+          "512",
+          "--cache-type-k",
+          "q4_0",
+          "--cache-type-v",
+          "q4_0",
+          "--ctx-size",
+          "131072",
+          "--temp",
+          "0.6",
+          "--top-p",
+          "0.95",
+          "--top-k",
+          "20",
+          "--min-p",
+          "0.0",
+          "--presence-penalty",
+          "0.0",
+          "--repeat-penalty",
+          "1.0",
+          "--reasoning",
+          "on",
+          "--reasoning-effort",
+          "low",
+          "--jinja",
+          "--chat-template-kwargs",
+          "{\"reasoning_effort\":\"low\"}",
+          "-n",
+          "-1",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "9092",
+          "--alias",
+          "Qwen3.8-27B-UD-IQ2_XXS",
+          "--spec-type",
+          "none"
+        ],
+        "environment": {
+          "LLAMA_MODELS_PATH": "D:\\models",
+          "GGML_CUDA_CLIFF_PROFILE": "1",
+          "GGML_CUDA_CLIFF_OPS": "1"
+        }
+      },
+      "metrics": [
+        {
+          "case": "targetprofile",
+          "size_requested": 4096,
+          "size_tokenizer": 4096,
+          "repeat": 1,
+          "wall_seconds": 11.971202499997162,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 4096,
+            "prompt_ms": 9531.955,
+            "prompt_per_token_ms": 2.327137451171875,
+            "prompt_per_second": 429.71247766066875,
+            "predicted_n": 16,
+            "predicted_ms": 2434.398,
+            "predicted_per_token_ms": 162.2932,
+            "predicted_per_second": 6.161687612296756
+          },
+          "usage": {
+            "completion_tokens": 16,
+            "prompt_tokens": 4096,
+            "total_tokens": 4112,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "message_sha256": "4952653c99d4e3ae3d8d83b92d970e0f35483aefd93c8b9c23dfc63e512ade2d"
+        }
+      ],
+      "profile": {
+        "note": "Intrusive serialized operation intervals from request start to sampler initialization; excludes startup and final small prompt tail. Fusion groups attributed to first node. Event intervals include dispatch gaps.",
+        "by_op": {
+          "MUL_MAT": [
+            5570,
+            6807.234000000012,
+            1018.8239999999697,
+            6300.0778
+          ],
+          "RMS_NORM": [
+            3030,
+            354.52800000000053,
+            9.746000000000063,
+            110.90310000000078
+          ],
+          "GATED_DELTA_NET": [
+            480,
+            340.5210000000001,
+            1.3339999999999979,
+            307.3286999999999
+          ],
+          "ADD": [
+            1740,
+            260.3699999999999,
+            6.212999999999894,
+            104.2114000000005
+          ],
+          "GLU": [
+            630,
+            250.78100000000003,
+            2.3299999999999743,
+            187.2641999999998
+          ],
+          "FLASH_ATTN_EXT": [
+            160,
+            225.44199999999992,
+            9.411000000000007,
+            213.563
+          ],
+          "CONCAT": [
+            480,
+            202.87899999999976,
+            6.226999999999964,
+            158.75820000000002
+          ],
+          "UNARY": [
+            1648,
+            188.27299999999974,
+            4.910999999999892,
+            54.1366999999999
+          ],
+          "SSM_CONV": [
+            480,
+            97.73799999999983,
+            1.5539999999999932,
+            63.04880000000003
+          ],
+          "GET_ROWS": [
+            960,
+            86.8309999999998,
+            4.366999999999971,
+            9.228600000000021
+          ],
+          "ROPE": [
+            320,
+            55.59200000000002,
+            1.1649999999999987,
+            31.58139999999998
+          ],
+          "CPY": [
+            480,
+            49.287000000000056,
+            1.426999999999996,
+            5.125100000000002
+          ],
+          "CONT": [
+            160,
+            41.446000000000026,
+            0.4820000000000004,
+            29.25149999999997
+          ],
+          "MUL": [
+            480,
+            39.522000000000055,
+            1.4149999999999963,
+            2.611999999999997
+          ],
+          "SET_ROWS": [
+            320,
+            27.440000000000023,
+            0.9180000000000007,
+            4.514100000000002
+          ],
+          "SCALE": [
+            96,
+            9.347000000000003,
+            0.2630000000000002,
+            2.1794
+          ]
+        },
+        "top_groups": [
+          {
+            "name_op_shape": [
+              "ffn_gate",
+              "MUL_MAT",
+              "17408,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              441,
+              996.672999999999,
+              98.60999999999997,
+              960.0745999999997
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_out",
+              "MUL_MAT",
+              "5120,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              441,
+              989.3919999999998,
+              3.7729999999999886,
+              946.691800000001
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_up",
+              "MUL_MAT",
+              "17408,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              441,
+              956.9659999999993,
+              4.130999999999984,
+              912.4617999999994
+            ]
+          },
+          {
+            "name_op_shape": [
+              "node_72",
+              "MUL_MAT",
+              "10240,55,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              1,
+              809.465,
+              798.128,
+              809.2178
+            ]
+          },
+          {
+            "name_op_shape": [
+              "Qcur_full",
+              "MUL_MAT",
+              "12288,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              112,
+              514.554,
+              2.6959999999999926,
+              505.38730000000004
+            ]
+          },
+          {
+            "name_op_shape": [
+              "linear_attn_out",
+              "MUL_MAT",
+              "5120,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              336,
+              306.37700000000007,
+              2.811999999999989,
+              278.2058999999999
+            ]
+          },
+          {
+            "name_op_shape": [
+              "z",
+              "MUL_MAT",
+              "6144,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              336,
+              296.1340000000001,
+              3.726999999999984,
+              269.3141000000001
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_swiglu",
+              "GLU",
+              "17408,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              441,
+              209.76099999999985,
+              1.7419999999999929,
+              164.47680000000003
+            ]
+          },
+          {
+            "name_op_shape": [
+              "conv_input",
+              "CONCAT",
+              "515,10240,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              336,
+              168.5449999999999,
+              1.2399999999999978,
+              136.56970000000004
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_out",
+              "MUL_MAT",
+              "5120,442,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              63,
+              123.95899999999997,
+              0.5800000000000002,
+              118.38690000000001
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_up",
+              "MUL_MAT",
+              "17408,442,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              63,
+              120.076,
+              0.5360000000000003,
+              114.27340000000002
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_gate",
+              "MUL_MAT",
+              "17408,442,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              63,
+              113.89499999999998,
+              0.7960000000000004,
+              108.60850000000002
+            ]
+          },
+          {
+            "name_op_shape": [
+              "norm",
+              "RMS_NORM",
+              "5120,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              889,
+              111.42599999999983,
+              3.2119999999999567,
+              38.022599999999976
+            ]
+          },
+          {
+            "name_op_shape": [
+              "attn_output",
+              "MUL_MAT",
+              "5120,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              112,
+              100.836,
+              1.749999999999998,
+              92.13049999999997
+            ]
+          },
+          {
+            "name_op_shape": [
+              "l_out",
+              "ADD",
+              "5120,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              441,
+              92.50299999999994,
+              2.018999999999989,
+              46.68029999999999
+            ]
+          },
+          {
+            "name_op_shape": [
+              "attn_residual",
+              "ADD",
+              "5120,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              441,
+              81.21000000000005,
+              1.6259999999999943,
+              40.89910000000001
+            ]
+          },
+          {
+            "name_op_shape": [
+              "conv_output_raw",
+              "SSM_CONV",
+              "10240,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              336,
+              79.97699999999999,
+              1.2279999999999982,
+              55.50670000000002
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_up",
+              "MUL_MAT",
+              "17408,55,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              63,
+              70.04,
+              0.5650000000000002,
+              55.86159999999999
+            ]
+          },
+          {
+            "name_op_shape": [
+              "Vcur",
+              "MUL_MAT",
+              "1024,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              112,
+              65.13899999999998,
+              1.0450000000000006,
+              49.5905
+            ]
+          },
+          {
+            "name_op_shape": [
+              "Qcur_full",
+              "MUL_MAT",
+              "12288,442,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              16,
+              63.227000000000004,
+              0.10400000000000002,
+              61.95190000000001
+            ]
+          },
+          {
+            "name_op_shape": [
+              "Kcur",
+              "MUL_MAT",
+              "1024,512,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              112,
+              62.83700000000001,
+              0.8400000000000006,
+              47.23049999999999
+            ]
+          },
+          {
+            "name_op_shape": [
+              "norm",
+              "RMS_NORM",
+              "128,48,512,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              336,
+              56.34900000000002,
+              1.1879999999999993,
+              25.762299999999993
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_gate",
+              "MUL_MAT",
+              "17408,55,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              63,
+              53.307999999999964,
+              12.727999999999998,
+              48.7206
+            ]
+          },
+          {
+            "name_op_shape": [
+              "ffn_out",
+              "MUL_MAT",
+              "5120,55,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              63,
+              45.51599999999999,
+              0.6700000000000003,
+              39.278099999999995
+            ]
+          },
+          {
+            "name_op_shape": [
+              "linear_attn_out",
+              "MUL_MAT",
+              "5120,442,1,1"
+            ],
+            "count_wall_ms_dispatch_ms_event_ms": [
+              48,
+              38.657,
+              0.3790000000000002,
+              34.8975
+            ]
+          }
+        ],
+        "graphs_count_elapsed_ms": {
+          "3703": [
+            10,
+            9135.706
+          ]
+        },
+        "matmul_columns_count_wall_ms": {
+          "55": [
+            493,
+            1135.3849999999993
+          ],
+          "1320": [
+            16,
+            1.2999999999999998
+          ],
+          "880": [
+            16,
+            1.448
+          ],
+          "220": [
+            16,
+            1.2009999999999998
+          ],
+          "5280": [
+            16,
+            1.41
+          ],
+          "512": [
+            3451,
+            4861.318999999998
+          ],
+          "12288": [
+            112,
+            23.705
+          ],
+          "8192": [
+            112,
+            28.055
+          ],
+          "2048": [
+            112,
+            9.644
+          ],
+          "49152": [
+            112,
+            19.951000000000004
+          ],
+          "442": [
+            493,
+            597.232999999999
+          ],
+          "10608": [
+            16,
+            1.9589999999999999
+          ],
+          "7072": [
+            16,
+            1.5850000000000002
+          ],
+          "1768": [
+            16,
+            1.3539999999999996
+          ],
+          "42432": [
+            16,
+            2.2129999999999996
+          ],
+          "11": [
+            493,
+            114.4909999999999
+          ],
+          "264": [
+            16,
+            1.185
+          ],
+          "176": [
+            16,
+            1.315
+          ],
+          "44": [
+            16,
+            1.0870000000000002
+          ],
+          "1056": [
+            16,
+            1.394
+          ]
+        }
+      }
+    }
+  }
+}

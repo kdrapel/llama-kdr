@@ -1,0 +1,153 @@
+{
+  "title": "DSpine prefill and generation speed at 8K / 16K / 32K for commit bc7c78e",
+  "commit": "bc7c78ef95ac8b65ae50eeff7d02b544d6cc62ee",
+  "model": "Qwen3.8-27B-GSQ-RCO-IQ3_XXS.gguf",
+  "draft": "Qwen3.8-27B-DSpine-b16-Q4_K_M.gguf",
+  "gpu": "AMD Radeon RX 9060 XT (gfx1200)",
+  "context_capacity": 131072,
+  "target_kv": "Q4_0",
+  "prompt_cache": false,
+  "flash_attention": true,
+  "speculative_decoding": "DFlash, max draft width 6",
+  "generated_tokens_per_run": 256,
+  "sampling": {
+    "seed": 42,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20
+  },
+  "prompt_construction": "tokens[:N-2048] + tokens[-2048:] from one tokenization of the 8K history repeated 40x; the 32K prompt is byte-identical to the saved q2-32k-populated prompt",
+  "method": "One cold request per fresh server, profiling off, two runs per size, sizes run 8K/16K/32K then 8K/16K/32K",
+  "binary_sha256": {
+    "ggml-hip.dll": "e4acb0a1bb3f3458672f9807746c59852272888ee6680a101507e4b91fd9fa0d",
+    "llama-server.exe": "b45e20fd1ec3bb52149d9b4bae82b462a2f59887f6a1279007457187a7ac0346"
+  },
+  "points": [
+    {
+      "context_tokens": 8192,
+      "prefill_tok_s_mean": 273.94751499121105,
+      "prefill_tok_s_min": 217.87050938614453,
+      "prefill_tok_s_max": 330.02452059627757,
+      "generation_tok_s_mean": 28.42002762839609,
+      "generation_tok_s_min": 27.633715213216327,
+      "generation_tok_s_max": 29.20634004357586,
+      "sample_count": 2,
+      "samples": [
+        {
+          "run": 1,
+          "prefill_tok_s": 217.87050938614453,
+          "generation_tok_s": 27.633715213216327,
+          "prompt_ms": 37600.316,
+          "generation_ms": 9227.858,
+          "prompt_tokens": 8192,
+          "output_tokens": 256,
+          "decode_steps": 61,
+          "ms_per_step": 151.3,
+          "drafts_proposed": 360,
+          "drafts_accepted": 195,
+          "acceptance": 0.542,
+          "content_sha256": "62a4688a27a159a739e12a42201e3b80961c76d5108e6da2ba97485909f92fc0"
+        },
+        {
+          "run": 2,
+          "prefill_tok_s": 330.02452059627757,
+          "generation_tok_s": 29.20634004357586,
+          "prompt_ms": 24822.398,
+          "generation_ms": 8730.981,
+          "prompt_tokens": 8192,
+          "output_tokens": 256,
+          "decode_steps": 61,
+          "ms_per_step": 143.1,
+          "drafts_proposed": 360,
+          "drafts_accepted": 195,
+          "acceptance": 0.542,
+          "content_sha256": "62a4688a27a159a739e12a42201e3b80961c76d5108e6da2ba97485909f92fc0"
+        }
+      ]
+    },
+    {
+      "context_tokens": 16384,
+      "prefill_tok_s_mean": 227.04456984750055,
+      "prefill_tok_s_min": 201.76931890121136,
+      "prefill_tok_s_max": 252.31982079378977,
+      "generation_tok_s_mean": 28.74505260602394,
+      "generation_tok_s_min": 28.73688541521926,
+      "generation_tok_s_max": 28.75321979682862,
+      "sample_count": 2,
+      "samples": [
+        {
+          "run": 1,
+          "prefill_tok_s": 201.76931890121136,
+          "generation_tok_s": 28.73688541521926,
+          "prompt_ms": 81201.642,
+          "generation_ms": 8873.613,
+          "prompt_tokens": 16384,
+          "output_tokens": 256,
+          "decode_steps": 63,
+          "ms_per_step": 140.9,
+          "drafts_proposed": 367,
+          "drafts_accepted": 193,
+          "acceptance": 0.526,
+          "content_sha256": "24746fef0297dbcab6cf622cc9c47a7c0746eae7ec04cbe5c1359d85cf5ba27a"
+        },
+        {
+          "run": 2,
+          "prefill_tok_s": 252.31982079378977,
+          "generation_tok_s": 28.75321979682862,
+          "prompt_ms": 64933.464,
+          "generation_ms": 8868.572,
+          "prompt_tokens": 16384,
+          "output_tokens": 256,
+          "decode_steps": 63,
+          "ms_per_step": 140.8,
+          "drafts_proposed": 367,
+          "drafts_accepted": 193,
+          "acceptance": 0.526,
+          "content_sha256": "24746fef0297dbcab6cf622cc9c47a7c0746eae7ec04cbe5c1359d85cf5ba27a"
+        }
+      ]
+    },
+    {
+      "context_tokens": 32768,
+      "prefill_tok_s_mean": 231.4945118810546,
+      "prefill_tok_s_min": 224.6352181611541,
+      "prefill_tok_s_max": 238.35380560095507,
+      "generation_tok_s_mean": 26.68802842692259,
+      "generation_tok_s_min": 25.614267810127764,
+      "generation_tok_s_max": 27.761789043717414,
+      "sample_count": 2,
+      "samples": [
+        {
+          "run": 1,
+          "prefill_tok_s": 238.35380560095507,
+          "generation_tok_s": 25.614267810127764,
+          "prompt_ms": 137476.303,
+          "generation_ms": 9955.389,
+          "prompt_tokens": 32768,
+          "output_tokens": 256,
+          "decode_steps": 51,
+          "ms_per_step": 195.2,
+          "drafts_proposed": 294,
+          "drafts_accepted": 205,
+          "acceptance": 0.697,
+          "content_sha256": "7686e45d90572a00395135582f559e5a1dc0525b303a3a1ace07d01d004528cb"
+        },
+        {
+          "run": 2,
+          "prefill_tok_s": 224.6352181611541,
+          "generation_tok_s": 27.761789043717414,
+          "prompt_ms": 145872.051,
+          "generation_ms": 9185.287,
+          "prompt_tokens": 32768,
+          "output_tokens": 256,
+          "decode_steps": 51,
+          "ms_per_step": 180.1,
+          "drafts_proposed": 294,
+          "drafts_accepted": 205,
+          "acceptance": 0.697,
+          "content_sha256": "7686e45d90572a00395135582f559e5a1dc0525b303a3a1ace07d01d004528cb"
+        }
+      ]
+    }
+  ]
+}

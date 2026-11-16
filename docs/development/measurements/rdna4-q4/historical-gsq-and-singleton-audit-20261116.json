@@ -1,0 +1,532 @@
+{
+  "historical": {
+    "dspine-rocm-speed-curve-gsq-rco-8k-100k": {
+      "csv": [
+        {
+          "context_tokens": "8192",
+          "generation_tok_s_mean": "45.73297241977626",
+          "generation_tok_s_min": "44.18549162405867",
+          "generation_tok_s_max": "47.28045321549385",
+          "prefill_tok_s_mean": "317.6482053593328",
+          "prefill_tok_s_min": "296.3520981272732",
+          "prefill_tok_s_max": "338.9443125913923",
+          "sample_count": "2"
+        },
+        {
+          "context_tokens": "32768",
+          "generation_tok_s_mean": "23.813946399569442",
+          "generation_tok_s_min": "23.813946399569442",
+          "generation_tok_s_max": "23.813946399569442",
+          "prefill_tok_s_mean": "207.26669518902995",
+          "prefill_tok_s_min": "207.26669518902995",
+          "prefill_tok_s_max": "207.26669518902995",
+          "sample_count": "1"
+        },
+        {
+          "context_tokens": "99991",
+          "generation_tok_s_mean": "19.879442689240786",
+          "generation_tok_s_min": "19.879442689240786",
+          "generation_tok_s_max": "19.879442689240786",
+          "prefill_tok_s_mean": "169.62272085616266",
+          "prefill_tok_s_min": "169.62272085616266",
+          "prefill_tok_s_max": "169.62272085616266",
+          "sample_count": "1"
+        }
+      ],
+      "metadata": {
+        "title": "DSpine generation and prefill speed vs populated context",
+        "model": "Qwen3.8-27B-GSQ-RCO-IQ3_XXS.gguf",
+        "draft": "Qwen3.8-27B-DSpine-b16-Q4_K_M.gguf",
+        "engine": "DSpine llama.cpp ROCm build with gfx1200 Q2_K hipBLAS dispatch",
+        "gpu": "AMD Radeon RX 9060 XT (gfx1200)",
+        "context_capacity": 131072,
+        "target_kv": "Q4_0",
+        "prompt_cache": false,
+        "flash_attention": true,
+        "speculative_decoding": "DFlash, max draft width 6",
+        "generated_tokens_per_run": 96,
+        "sampling": {
+          "seed": 42,
+          "temperature": 0.6,
+          "top_p": 0.95,
+          "top_k": 20
+        },
+        "averaging": "8K is the arithmetic mean of two same-binary runs; 32K and 100K are single samples.",
+        "prompt_construction": "Synthetic history. The 32K and 100K prompts were tokenized from the saved 8K history, then trimmed to the stated token counts.",
+        "eight_k_binary_sha256": {
+          "ggml-hip.dll": "fd9f0c6203bd371fad30dcdcec67c87f30cfae500b123af74bf5d5d8c14553cf",
+          "llama-server.exe": "cd861d9e037adaf2324e527f694e8dd095c0fb8d850a211130ed9fdc3a7cc92f"
+        },
+        "points": [
+          {
+            "context_tokens": 8192,
+            "prefill_tok_s_mean": 317.6482053593328,
+            "prefill_tok_s_min": 296.3520981272732,
+            "prefill_tok_s_max": 338.9443125913923,
+            "generation_tok_s_mean": 45.73297241977626,
+            "generation_tok_s_min": 44.18549162405867,
+            "generation_tok_s_max": 47.28045321549385,
+            "samples": [
+              {
+                "source": "unchanged-memory-20261115-122744-1",
+                "run": 1,
+                "prefill_tok_s": 296.3520981272732,
+                "generation_tok_s": 47.28045321549385,
+                "prompt_ms": 27642.794,
+                "generation_ms": 2009.287,
+                "prompt_tokens": 8192,
+                "output_tokens": 96,
+                "drafts_proposed": 102,
+                "drafts_accepted": 78
+              },
+              {
+                "source": "unchanged-memory-20261115-122744-2",
+                "run": 1,
+                "prefill_tok_s": 338.9443125913923,
+                "generation_tok_s": 44.18549162405867,
+                "prompt_ms": 24169.162,
+                "generation_ms": 2150.027,
+                "prompt_tokens": 8192,
+                "output_tokens": 96,
+                "drafts_proposed": 102,
+                "drafts_accepted": 78
+              }
+            ]
+          },
+          {
+            "context_tokens": 32768,
+            "prefill_tok_s_mean": 207.26669518902995,
+            "prefill_tok_s_min": 207.26669518902995,
+            "prefill_tok_s_max": 207.26669518902995,
+            "generation_tok_s_mean": 23.813946399569442,
+            "generation_tok_s_min": 23.813946399569442,
+            "generation_tok_s_max": 23.813946399569442,
+            "samples": [
+              {
+                "source": "q2-32k-populated",
+                "run": 1,
+                "prefill_tok_s": 207.26669518902995,
+                "generation_tok_s": 23.813946399569442,
+                "prompt_ms": 158095.829,
+                "generation_ms": 3989.259,
+                "prompt_tokens": 32768,
+                "output_tokens": 96,
+                "drafts_proposed": 117,
+                "drafts_accepted": 74
+              }
+            ]
+          },
+          {
+            "context_tokens": 99991,
+            "prefill_tok_s_mean": 169.62272085616266,
+            "prefill_tok_s_min": 169.62272085616266,
+            "prefill_tok_s_max": 169.62272085616266,
+            "generation_tok_s_mean": 19.879442689240786,
+            "generation_tok_s_min": 19.879442689240786,
+            "generation_tok_s_max": 19.879442689240786,
+            "samples": [
+              {
+                "source": "gsq-rco-100k-populated-20261115-125143",
+                "run": 1,
+                "prefill_tok_s": 169.62272085616266,
+                "generation_tok_s": 19.879442689240786,
+                "prompt_ms": 589490.603,
+                "generation_ms": 4778.806,
+                "prompt_tokens": 99991,
+                "output_tokens": 96,
+                "drafts_proposed": 106,
+                "drafts_accepted": 76
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "dspine-rocm-speed-curve-bc7c78ef95ac8b65ae50eeff7d02b544d6cc62ee": {
+      "csv": [
+        {
+          "context_tokens": "8192",
+          "generation_tok_s_mean": "28.42",
+          "generation_tok_s_min": "27.63",
+          "generation_tok_s_max": "29.21",
+          "prefill_tok_s_mean": "273.95",
+          "prefill_tok_s_min": "217.87",
+          "prefill_tok_s_max": "330.02",
+          "sample_count": "2"
+        },
+        {
+          "context_tokens": "16384",
+          "generation_tok_s_mean": "28.75",
+          "generation_tok_s_min": "28.74",
+          "generation_tok_s_max": "28.75",
+          "prefill_tok_s_mean": "227.04",
+          "prefill_tok_s_min": "201.77",
+          "prefill_tok_s_max": "252.32",
+          "sample_count": "2"
+        },
+        {
+          "context_tokens": "32768",
+          "generation_tok_s_mean": "26.69",
+          "generation_tok_s_min": "25.61",
+          "generation_tok_s_max": "27.76",
+          "prefill_tok_s_mean": "231.49",
+          "prefill_tok_s_min": "224.64",
+          "prefill_tok_s_max": "238.35",
+          "sample_count": "2"
+        }
+      ],
+      "metadata": {
+        "title": "DSpine prefill and generation speed at 8K / 16K / 32K for commit bc7c78e",
+        "commit": "bc7c78ef95ac8b65ae50eeff7d02b544d6cc62ee",
+        "model": "Qwen3.8-27B-GSQ-RCO-IQ3_XXS.gguf",
+        "draft": "Qwen3.8-27B-DSpine-b16-Q4_K_M.gguf",
+        "gpu": "AMD Radeon RX 9060 XT (gfx1200)",
+        "context_capacity": 131072,
+        "target_kv": "Q4_0",
+        "prompt_cache": false,
+        "flash_attention": true,
+        "speculative_decoding": "DFlash, max draft width 6",
+        "generated_tokens_per_run": 256,
+        "sampling": {
+          "seed": 42,
+          "temperature": 0.6,
+          "top_p": 0.95,
+          "top_k": 20
+        },
+        "prompt_construction": "tokens[:N-2048] + tokens[-2048:] from one tokenization of the 8K history repeated 40x; the 32K prompt is byte-identical to the saved q2-32k-populated prompt",
+        "method": "One cold request per fresh server, profiling off, two runs per size, sizes run 8K/16K/32K then 8K/16K/32K",
+        "binary_sha256": {
+          "ggml-hip.dll": "e4acb0a1bb3f3458672f9807746c59852272888ee6680a101507e4b91fd9fa0d",
+          "llama-server.exe": "b45e20fd1ec3bb52149d9b4bae82b462a2f59887f6a1279007457187a7ac0346"
+        },
+        "points": [
+          {
+            "context_tokens": 8192,
+            "prefill_tok_s_mean": 273.94751499121105,
+            "prefill_tok_s_min": 217.87050938614453,
+            "prefill_tok_s_max": 330.02452059627757,
+            "generation_tok_s_mean": 28.42002762839609,
+            "generation_tok_s_min": 27.633715213216327,
+            "generation_tok_s_max": 29.20634004357586,
+            "sample_count": 2,
+            "samples": [
+              {
+                "run": 1,
+                "prefill_tok_s": 217.87050938614453,
+                "generation_tok_s": 27.633715213216327,
+                "prompt_ms": 37600.316,
+                "generation_ms": 9227.858,
+                "prompt_tokens": 8192,
+                "output_tokens": 256,
+                "decode_steps": 61,
+                "ms_per_step": 151.3,
+                "drafts_proposed": 360,
+                "drafts_accepted": 195,
+                "acceptance": 0.542,
+                "content_sha256": "62a4688a27a159a739e12a42201e3b80961c76d5108e6da2ba97485909f92fc0"
+              },
+              {
+                "run": 2,
+                "prefill_tok_s": 330.02452059627757,
+                "generation_tok_s": 29.20634004357586,
+                "prompt_ms": 24822.398,
+                "generation_ms": 8730.981,
+                "prompt_tokens": 8192,
+                "output_tokens": 256,
+                "decode_steps": 61,
+                "ms_per_step": 143.1,
+                "drafts_proposed": 360,
+                "drafts_accepted": 195,
+                "acceptance": 0.542,
+                "content_sha256": "62a4688a27a159a739e12a42201e3b80961c76d5108e6da2ba97485909f92fc0"
+              }
+            ]
+          },
+          {
+            "context_tokens": 16384,
+            "prefill_tok_s_mean": 227.04456984750055,
+            "prefill_tok_s_min": 201.76931890121136,
+            "prefill_tok_s_max": 252.31982079378977,
+            "generation_tok_s_mean": 28.74505260602394,
+            "generation_tok_s_min": 28.73688541521926,
+            "generation_tok_s_max": 28.75321979682862,
+            "sample_count": 2,
+            "samples": [
+              {
+                "run": 1,
+                "prefill_tok_s": 201.76931890121136,
+                "generation_tok_s": 28.73688541521926,
+                "prompt_ms": 81201.642,
+                "generation_ms": 8873.613,
+                "prompt_tokens": 16384,
+                "output_tokens": 256,
+                "decode_steps": 63,
+                "ms_per_step": 140.9,
+                "drafts_proposed": 367,
+                "drafts_accepted": 193,
+                "acceptance": 0.526,
+                "content_sha256": "24746fef0297dbcab6cf622cc9c47a7c0746eae7ec04cbe5c1359d85cf5ba27a"
+              },
+              {
+                "run": 2,
+                "prefill_tok_s": 252.31982079378977,
+                "generation_tok_s": 28.75321979682862,
+                "prompt_ms": 64933.464,
+                "generation_ms": 8868.572,
+                "prompt_tokens": 16384,
+                "output_tokens": 256,
+                "decode_steps": 63,
+                "ms_per_step": 140.8,
+                "drafts_proposed": 367,
+                "drafts_accepted": 193,
+                "acceptance": 0.526,
+                "content_sha256": "24746fef0297dbcab6cf622cc9c47a7c0746eae7ec04cbe5c1359d85cf5ba27a"
+              }
+            ]
+          },
+          {
+            "context_tokens": 32768,
+            "prefill_tok_s_mean": 231.4945118810546,
+            "prefill_tok_s_min": 224.6352181611541,
+            "prefill_tok_s_max": 238.35380560095507,
+            "generation_tok_s_mean": 26.68802842692259,
+            "generation_tok_s_min": 25.614267810127764,
+            "generation_tok_s_max": 27.761789043717414,
+            "sample_count": 2,
+            "samples": [
+              {
+                "run": 1,
+                "prefill_tok_s": 238.35380560095507,
+                "generation_tok_s": 25.614267810127764,
+                "prompt_ms": 137476.303,
+                "generation_ms": 9955.389,
+                "prompt_tokens": 32768,
+                "output_tokens": 256,
+                "decode_steps": 51,
+                "ms_per_step": 195.2,
+                "drafts_proposed": 294,
+                "drafts_accepted": 205,
+                "acceptance": 0.697,
+                "content_sha256": "7686e45d90572a00395135582f559e5a1dc0525b303a3a1ace07d01d004528cb"
+              },
+              {
+                "run": 2,
+                "prefill_tok_s": 224.6352181611541,
+                "generation_tok_s": 27.761789043717414,
+                "prompt_ms": 145872.051,
+                "generation_ms": 9185.287,
+                "prompt_tokens": 32768,
+                "output_tokens": 256,
+                "decode_steps": 51,
+                "ms_per_step": 180.1,
+                "drafts_proposed": 294,
+                "drafts_accepted": 205,
+                "acceptance": 0.697,
+                "content_sha256": "7686e45d90572a00395135582f559e5a1dc0525b303a3a1ace07d01d004528cb"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "singleton_fixed_256": {
+    "prompt": "What is a singleton in C#?",
+    "context_capacity": 131072,
+    "prompt_tokens": 48,
+    "temperature": 0.6,
+    "output_tokens": 256,
+    "order": [
+      "candidate",
+      "stock",
+      "stock",
+      "candidate"
+    ],
+    "samples": [
+      {
+        "trial": 1,
+        "variant": "candidate",
+        "context_tokens": 48,
+        "wall_s": 11.014999100007117,
+        "request_sha256": "66f35e5b7b3229cfcdf323894da8acbcbf8a66f90d4dda0826d3f521c089a58e",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 48,
+          "prompt_ms": 2050.734,
+          "prompt_per_token_ms": 42.723625,
+          "prompt_per_second": 23.40625356579644,
+          "predicted_n": 256,
+          "predicted_ms": 8962.958,
+          "predicted_per_token_ms": 35.14885490196079,
+          "predicted_per_second": 28.45042897668381,
+          "draft_n": 416,
+          "draft_n_accepted": 185
+        },
+        "tokens_evaluated": 48,
+        "truncated": false,
+        "stop_type": "limit",
+        "output_sha256": "c20e3cafb82a2f05017a53809225ff38d600613dc200a9158fd8587fb6c42b05",
+        "output_token_sha256": "13a30b95b13b484013c14efd546d63059afa715f08010130805c6f2ec52d4fe7",
+        "output_characters": 1134,
+        "response_file": "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\docs\\development\\measurements\\rdna4-q4\\fa-qr-ab-singleton-20261116-1-candidate.response.json"
+      },
+      {
+        "trial": 2,
+        "variant": "stock",
+        "context_tokens": 48,
+        "wall_s": 10.777655599988066,
+        "request_sha256": "66f35e5b7b3229cfcdf323894da8acbcbf8a66f90d4dda0826d3f521c089a58e",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 48,
+          "prompt_ms": 2099.845,
+          "prompt_per_token_ms": 43.74677083333333,
+          "prompt_per_second": 22.858830056504175,
+          "predicted_n": 256,
+          "predicted_ms": 8661.407,
+          "predicted_per_token_ms": 33.966301960784314,
+          "predicted_per_second": 29.440944179161658,
+          "draft_n": 388,
+          "draft_n_accepted": 188
+        },
+        "tokens_evaluated": 48,
+        "truncated": false,
+        "stop_type": "limit",
+        "output_sha256": "99d9e2a3dab597b0e94ef7b1304eca50bc9c0dc865f08aa376687d62a719f47b",
+        "output_token_sha256": "ce142105a7e23015dd64e25c9cea5f447ea22e589d29f6401357a9375acc18c1",
+        "output_characters": 1135,
+        "response_file": "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\docs\\development\\measurements\\rdna4-q4\\fa-qr-ab-singleton-20261116-2-stock.response.json"
+      },
+      {
+        "trial": 3,
+        "variant": "stock",
+        "context_tokens": 48,
+        "wall_s": 10.803294499986805,
+        "request_sha256": "66f35e5b7b3229cfcdf323894da8acbcbf8a66f90d4dda0826d3f521c089a58e",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 48,
+          "prompt_ms": 2119.325,
+          "prompt_per_token_ms": 44.15260416666666,
+          "prompt_per_second": 22.648720701166646,
+          "predicted_n": 256,
+          "predicted_ms": 8682.527,
+          "predicted_per_token_ms": 34.049125490196076,
+          "predicted_per_second": 29.3693299197342,
+          "draft_n": 388,
+          "draft_n_accepted": 188
+        },
+        "tokens_evaluated": 48,
+        "truncated": false,
+        "stop_type": "limit",
+        "output_sha256": "99d9e2a3dab597b0e94ef7b1304eca50bc9c0dc865f08aa376687d62a719f47b",
+        "output_token_sha256": "ce142105a7e23015dd64e25c9cea5f447ea22e589d29f6401357a9375acc18c1",
+        "output_characters": 1135,
+        "response_file": "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\docs\\development\\measurements\\rdna4-q4\\fa-qr-ab-singleton-20261116-3-stock.response.json"
+      },
+      {
+        "trial": 4,
+        "variant": "candidate",
+        "context_tokens": 48,
+        "wall_s": 10.737313799909316,
+        "request_sha256": "66f35e5b7b3229cfcdf323894da8acbcbf8a66f90d4dda0826d3f521c089a58e",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 48,
+          "prompt_ms": 1815.683,
+          "prompt_per_token_ms": 37.82672916666667,
+          "prompt_per_second": 26.436332773947875,
+          "predicted_n": 256,
+          "predicted_ms": 8920.128,
+          "predicted_per_token_ms": 34.98089411764706,
+          "predicted_per_second": 28.587033728663982,
+          "draft_n": 416,
+          "draft_n_accepted": 185
+        },
+        "tokens_evaluated": 48,
+        "truncated": false,
+        "stop_type": "limit",
+        "output_sha256": "c20e3cafb82a2f05017a53809225ff38d600613dc200a9158fd8587fb6c42b05",
+        "output_token_sha256": "13a30b95b13b484013c14efd546d63059afa715f08010130805c6f2ec52d4fe7",
+        "output_characters": 1134,
+        "response_file": "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\docs\\development\\measurements\\rdna4-q4\\fa-qr-ab-singleton-20261116-4-candidate.response.json"
+      }
+    ],
+    "means": {
+      "candidate": 28.518731352673896,
+      "stock": 29.40513704944793
+    },
+    "candidate_change_percent": -3.014458648104401
+  },
+  "singleton_complete_answers": {
+    "size": 48,
+    "order": [
+      "stock",
+      "candidate"
+    ],
+    "rows": [
+      {
+        "trial": 1,
+        "variant": "stock",
+        "context_tokens": 48,
+        "wall_s": 24.62154520000331,
+        "request_sha256": "d4b3b85c556f9c306cf3f61784482c813c048fb4510a8af614252a1ee3e0482a",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 48,
+          "prompt_ms": 1769.19,
+          "prompt_per_token_ms": 36.858125,
+          "prompt_per_second": 27.13105997659946,
+          "predicted_n": 643,
+          "predicted_ms": 22850.765,
+          "predicted_per_token_ms": 35.59309190031153,
+          "predicted_per_second": 28.095339477693635,
+          "draft_n": 1062,
+          "draft_n_accepted": 465
+        },
+        "tokens_evaluated": 48,
+        "truncated": false,
+        "stop_type": "eos",
+        "output_sha256": "85616fb9d332a8098b94d4ddae47b584bd4a004934db46e7cc0f8b47ad6a0396",
+        "output_token_sha256": "2f8d6ea5c30f297a5c55139f7481ef3a49b289e5edbbfb9acbd6dcbfbf6a642b",
+        "output_characters": 2801,
+        "response_file": "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\docs\\development\\measurements\\rdna4-q4\\fa-qr-ab-singleton-full-20261116-1-stock.response.json"
+      },
+      {
+        "trial": 2,
+        "variant": "candidate",
+        "context_tokens": 48,
+        "wall_s": 25.663952400092967,
+        "request_sha256": "d4b3b85c556f9c306cf3f61784482c813c048fb4510a8af614252a1ee3e0482a",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 48,
+          "prompt_ms": 1768.458,
+          "prompt_per_token_ms": 36.842875,
+          "prompt_per_second": 27.14229006286833,
+          "predicted_n": 708,
+          "predicted_ms": 23881.429,
+          "predicted_per_token_ms": 33.77854172560113,
+          "predicted_per_second": 29.604593594462038,
+          "draft_n": 1122,
+          "draft_n_accepted": 520
+        },
+        "tokens_evaluated": 48,
+        "truncated": false,
+        "stop_type": "eos",
+        "output_sha256": "fc219885325275804bb6c8aa249ca6002b102b11caa1a1d11ffd6b760e5d403b",
+        "output_token_sha256": "6722ba3d6cc20d27af7dc51e20e9db570af3d9f65df09e58862cbcf093736d63",
+        "output_characters": 3050,
+        "response_file": "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\docs\\development\\measurements\\rdna4-q4\\fa-qr-ab-singleton-full-20261116-2-candidate.response.json"
+      }
+    ],
+    "binary_sha256": {
+      "llama-server.exe": "6e44dc302d0aa20bf33a889c05dcf283694a071eeb66c2ae4d3aca7e60631110",
+      "llama-server-impl.dll": "6bd856dcd2e74723fad648f3cc5b02cf0728e2356e71efe494f1f81a6854dce4",
+      "ggml-hip.dll": "d977897de9ab2e16ea94c94ffdd2a26790740454bbe052ff40334c9164af6d50",
+      "llama.dll": "b898ff37a484fd8736d62cbcd15e71b169081cd4e96cc98e3b28e0bb9a731cf5",
+      "ggml-base.dll": "a91a70cbf0cd093bbf97eb2e83e63549e0dbce2024416e70e02056a463dc3446"
+    }
+  },
+  "note": "Different prompts, output lengths, binaries and acceptance; not a controlled historical regression comparison."
+}

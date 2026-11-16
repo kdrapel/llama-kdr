@@ -1,0 +1,70 @@
+{
+  "size": 48,
+  "order": [
+    "stock",
+    "candidate"
+  ],
+  "rows": [
+    {
+      "trial": 1,
+      "variant": "stock",
+      "context_tokens": 48,
+      "wall_s": 24.62154520000331,
+      "request_sha256": "d4b3b85c556f9c306cf3f61784482c813c048fb4510a8af614252a1ee3e0482a",
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 48,
+        "prompt_ms": 1769.19,
+        "prompt_per_token_ms": 36.858125,
+        "prompt_per_second": 27.13105997659946,
+        "predicted_n": 643,
+        "predicted_ms": 22850.765,
+        "predicted_per_token_ms": 35.59309190031153,
+        "predicted_per_second": 28.095339477693635,
+        "draft_n": 1062,
+        "draft_n_accepted": 465
+      },
+      "tokens_evaluated": 48,
+      "truncated": false,
+      "stop_type": "eos",
+      "output_sha256": "85616fb9d332a8098b94d4ddae47b584bd4a004934db46e7cc0f8b47ad6a0396",
+      "output_token_sha256": "2f8d6ea5c30f297a5c55139f7481ef3a49b289e5edbbfb9acbd6dcbfbf6a642b",
+      "output_characters": 2801,
+      "response_file": "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\docs\\development\\measurements\\rdna4-q4\\fa-qr-ab-singleton-full-20261116-1-stock.response.json"
+    },
+    {
+      "trial": 2,
+      "variant": "candidate",
+      "context_tokens": 48,
+      "wall_s": 25.663952400092967,
+      "request_sha256": "d4b3b85c556f9c306cf3f61784482c813c048fb4510a8af614252a1ee3e0482a",
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 48,
+        "prompt_ms": 1768.458,
+        "prompt_per_token_ms": 36.842875,
+        "prompt_per_second": 27.14229006286833,
+        "predicted_n": 708,
+        "predicted_ms": 23881.429,
+        "predicted_per_token_ms": 33.77854172560113,
+        "predicted_per_second": 29.604593594462038,
+        "draft_n": 1122,
+        "draft_n_accepted": 520
+      },
+      "tokens_evaluated": 48,
+      "truncated": false,
+      "stop_type": "eos",
+      "output_sha256": "fc219885325275804bb6c8aa249ca6002b102b11caa1a1d11ffd6b760e5d403b",
+      "output_token_sha256": "6722ba3d6cc20d27af7dc51e20e9db570af3d9f65df09e58862cbcf093736d63",
+      "output_characters": 3050,
+      "response_file": "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\docs\\development\\measurements\\rdna4-q4\\fa-qr-ab-singleton-full-20261116-2-candidate.response.json"
+    }
+  ],
+  "binary_sha256": {
+    "llama-server.exe": "6e44dc302d0aa20bf33a889c05dcf283694a071eeb66c2ae4d3aca7e60631110",
+    "llama-server-impl.dll": "6bd856dcd2e74723fad648f3cc5b02cf0728e2356e71efe494f1f81a6854dce4",
+    "ggml-hip.dll": "d977897de9ab2e16ea94c94ffdd2a26790740454bbe052ff40334c9164af6d50",
+    "llama.dll": "b898ff37a484fd8736d62cbcd15e71b169081cd4e96cc98e3b28e0bb9a731cf5",
+    "ggml-base.dll": "a91a70cbf0cd093bbf97eb2e83e63549e0dbce2024416e70e02056a463dc3446"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "size": 65536,
+  "order": [
+    "stock",
+    "candidate"
+  ],
+  "rows": [
+    {
+      "trial": 1,
+      "variant": "stock",
+      "context_tokens": 65536,
+      "wall_s": 426.8864001999609,
+      "request_sha256": "5e11ac0161e0307b9fa6167a9247220015ac20e044f6ebee4b9073d45595c86d",
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 65536,
+        "prompt_ms": 415158.718,
+        "prompt_per_token_ms": 6.334819305419922,
+        "prompt_per_second": 157.85769913664683,
+        "predicted_n": 256,
+        "predicted_ms": 11681.72,
+        "predicted_per_token_ms": 45.81066666666666,
+        "predicted_per_second": 21.828977239653064,
+        "draft_n": 292,
+        "draft_n_accepted": 206
+      },
+      "tokens_evaluated": 65536,
+      "truncated": false,
+      "stop_type": "limit",
+      "output_sha256": "0fd7115e835cfe59477e16dfebf0185b41e38ad2a4e346d651ae08e4a492dfc3",
+      "output_token_sha256": "b92a3ef5e06e7132417029aadcda77bb5ac584b1fbad1d3bf5ac83fb008aecf3",
+      "output_characters": 631,
+      "response_file": "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\build-rocm\\bench\\fa-qr-ab-64k-20261116-1-stock.response.json"
+    },
+    {
+      "trial": 2,
+      "variant": "candidate",
+      "context_tokens": 65536,
+      "wall_s": 365.5903416000074,
+      "request_sha256": "5e11ac0161e0307b9fa6167a9247220015ac20e044f6ebee4b9073d45595c86d",
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 65536,
+        "prompt_ms": 355744.877,
+        "prompt_per_token_ms": 5.4282360382080075,
+        "prompt_per_second": 184.2219079939133,
+        "predicted_n": 256,
+        "predicted_ms": 9780.162,
+        "predicted_per_token_ms": 38.35357647058824,
+        "predicted_per_second": 26.073187744742878,
+        "draft_n": 290,
+        "draft_n_accepted": 206
+      },
+      "tokens_evaluated": 65536,
+      "truncated": false,
+      "stop_type": "limit",
+      "output_sha256": "0fd7115e835cfe59477e16dfebf0185b41e38ad2a4e346d651ae08e4a492dfc3",
+      "output_token_sha256": "b92a3ef5e06e7132417029aadcda77bb5ac584b1fbad1d3bf5ac83fb008aecf3",
+      "output_characters": 631,
+      "response_file": "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\build-rocm\\bench\\fa-qr-ab-64k-20261116-2-candidate.response.json"
+    }
+  ],
+  "binary_sha256": {
+    "llama-server.exe": "6e44dc302d0aa20bf33a889c05dcf283694a071eeb66c2ae4d3aca7e60631110",
+    "llama-server-impl.dll": "6bd856dcd2e74723fad648f3cc5b02cf0728e2356e71efe494f1f81a6854dce4",
+    "ggml-hip.dll": "d977897de9ab2e16ea94c94ffdd2a26790740454bbe052ff40334c9164af6d50",
+    "llama.dll": "b898ff37a484fd8736d62cbcd15e71b169081cd4e96cc98e3b28e0bb9a731cf5",
+    "ggml-base.dll": "a91a70cbf0cd093bbf97eb2e83e63549e0dbce2024416e70e02056a463dc3446"
+  }
+}

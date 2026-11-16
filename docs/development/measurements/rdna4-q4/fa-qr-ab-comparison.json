@@ -1,0 +1,89 @@
+{
+  "8k": {
+    "candidate": {
+      "samples": 2,
+      "generation_tps_mean": 29.42123158388102,
+      "generation_tps_runs": [
+        27.70842220855032,
+        31.13404095921172
+      ],
+      "prefill_tps_mean": 216.7376109825932,
+      "draft_accepted": [
+        204,
+        204
+      ],
+      "draft_proposed": [
+        301,
+        301
+      ],
+      "output_sha256": [
+        "15cd2cd38688f01b98fbc4b37a0b552552552c50c023eff8e5338d0dca21d0d2"
+      ]
+    },
+    "stock": {
+      "samples": 2,
+      "generation_tps_mean": 31.89604088962574,
+      "generation_tps_runs": [
+        31.90923062715528,
+        31.8828511520962
+      ],
+      "prefill_tps_mean": 208.03790288975927,
+      "draft_accepted": [
+        206,
+        206
+      ],
+      "draft_proposed": [
+        294,
+        294
+      ],
+      "output_sha256": [
+        "5ccee4d4724934e5692ec5ff4189ba8d05737c128bad2a88b6a2cc56dea67844"
+      ]
+    },
+    "generation_change_percent": -7.758985870091662,
+    "identical_output_between_variants": false,
+    "all_prompts_uncached": true,
+    "same_request": true
+  },
+  "64k": {
+    "candidate": {
+      "samples": 1,
+      "generation_tps_mean": 26.073187744742878,
+      "generation_tps_runs": [
+        26.073187744742878
+      ],
+      "prefill_tps_mean": 184.2219079939133,
+      "draft_accepted": [
+        206
+      ],
+      "draft_proposed": [
+        290
+      ],
+      "output_sha256": [
+        "0fd7115e835cfe59477e16dfebf0185b41e38ad2a4e346d651ae08e4a492dfc3"
+      ]
+    },
+    "stock": {
+      "samples": 1,
+      "generation_tps_mean": 21.828977239653064,
+      "generation_tps_runs": [
+        21.828977239653064
+      ],
+      "prefill_tps_mean": 157.85769913664683,
+      "draft_accepted": [
+        206
+      ],
+      "draft_proposed": [
+        292
+      ],
+      "output_sha256": [
+        "0fd7115e835cfe59477e16dfebf0185b41e38ad2a4e346d651ae08e4a492dfc3"
+      ]
+    },
+    "generation_change_percent": 19.44301127118344,
+    "identical_output_between_variants": true,
+    "all_prompts_uncached": true,
+    "same_request": true
+  },
+  "same_binaries_across_stages": true
+}

@@ -1,0 +1,108 @@
+{
+  "title": "DSpine generation and prefill speed vs populated context",
+  "model": "Qwen3.8-27B-GSQ-RCO-IQ3_XXS.gguf",
+  "draft": "Qwen3.8-27B-DSpine-b16-Q4_K_M.gguf",
+  "engine": "DSpine llama.cpp ROCm build with gfx1200 Q2_K hipBLAS dispatch",
+  "gpu": "AMD Radeon RX 9060 XT (gfx1200)",
+  "context_capacity": 131072,
+  "target_kv": "Q4_0",
+  "prompt_cache": false,
+  "flash_attention": true,
+  "speculative_decoding": "DFlash, max draft width 6",
+  "generated_tokens_per_run": 96,
+  "sampling": {
+    "seed": 42,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20
+  },
+  "averaging": "8K is the arithmetic mean of two same-binary runs; 32K and 100K are single samples.",
+  "prompt_construction": "Synthetic history. The 32K and 100K prompts were tokenized from the saved 8K history, then trimmed to the stated token counts.",
+  "eight_k_binary_sha256": {
+    "ggml-hip.dll": "fd9f0c6203bd371fad30dcdcec67c87f30cfae500b123af74bf5d5d8c14553cf",
+    "llama-server.exe": "cd861d9e037adaf2324e527f694e8dd095c0fb8d850a211130ed9fdc3a7cc92f"
+  },
+  "points": [
+    {
+      "context_tokens": 8192,
+      "prefill_tok_s_mean": 317.6482053593328,
+      "prefill_tok_s_min": 296.3520981272732,
+      "prefill_tok_s_max": 338.9443125913923,
+      "generation_tok_s_mean": 45.73297241977626,
+      "generation_tok_s_min": 44.18549162405867,
+      "generation_tok_s_max": 47.28045321549385,
+      "samples": [
+        {
+          "source": "unchanged-memory-20261115-122744-1",
+          "run": 1,
+          "prefill_tok_s": 296.3520981272732,
+          "generation_tok_s": 47.28045321549385,
+          "prompt_ms": 27642.794,
+          "generation_ms": 2009.287,
+          "prompt_tokens": 8192,
+          "output_tokens": 96,
+          "drafts_proposed": 102,
+          "drafts_accepted": 78
+        },
+        {
+          "source": "unchanged-memory-20261115-122744-2",
+          "run": 1,
+          "prefill_tok_s": 338.9443125913923,
+          "generation_tok_s": 44.18549162405867,
+          "prompt_ms": 24169.162,
+          "generation_ms": 2150.027,
+          "prompt_tokens": 8192,
+          "output_tokens": 96,
+          "drafts_proposed": 102,
+          "drafts_accepted": 78
+        }
+      ]
+    },
+    {
+      "context_tokens": 32768,
+      "prefill_tok_s_mean": 207.26669518902995,
+      "prefill_tok_s_min": 207.26669518902995,
+      "prefill_tok_s_max": 207.26669518902995,
+      "generation_tok_s_mean": 23.813946399569442,
+      "generation_tok_s_min": 23.813946399569442,
+      "generation_tok_s_max": 23.813946399569442,
+      "samples": [
+        {
+          "source": "q2-32k-populated",
+          "run": 1,
+          "prefill_tok_s": 207.26669518902995,
+          "generation_tok_s": 23.813946399569442,
+          "prompt_ms": 158095.829,
+          "generation_ms": 3989.259,
+          "prompt_tokens": 32768,
+          "output_tokens": 96,
+          "drafts_proposed": 117,
+          "drafts_accepted": 74
+        }
+      ]
+    },
+    {
+      "context_tokens": 99991,
+      "prefill_tok_s_mean": 169.62272085616266,
+      "prefill_tok_s_min": 169.62272085616266,
+      "prefill_tok_s_max": 169.62272085616266,
+      "generation_tok_s_mean": 19.879442689240786,
+      "generation_tok_s_min": 19.879442689240786,
+      "generation_tok_s_max": 19.879442689240786,
+      "samples": [
+        {
+          "source": "gsq-rco-100k-populated-20261115-125143",
+          "run": 1,
+          "prefill_tok_s": 169.62272085616266,
+          "generation_tok_s": 19.879442689240786,
+          "prompt_ms": 589490.603,
+          "generation_ms": 4778.806,
+          "prompt_tokens": 99991,
+          "output_tokens": 96,
+          "drafts_proposed": 106,
+          "drafts_accepted": 76
+        }
+      ]
+    }
+  ]
+}

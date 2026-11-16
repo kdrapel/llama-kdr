@@ -1,0 +1,41 @@
+"""Check the reviewed Fibonacci code from the two completed model answers."""
+import ast
+import json
+from pathlib import Path
+import re
+
+root = Path(__file__).resolve().parent
+rows = []
+for path in sorted(root.glob('fa-qr-ab-64k-20261116-*.quality-response.json')):
+    response = json.loads(path.read_text(encoding='utf-8'))
+    blocks = re.findall(r'```python\s*\n(.*?)```', response['content'], re.DOTALL)
+    if not blocks:
+        raise RuntimeError(f'no Python block in {path}')
+    code = blocks[0]
+    tree = ast.parse(code)
+    if not all(isinstance(node, ast.FunctionDef) for node in tree.body):
+        raise RuntimeError('review top-level statements before executing model output')
+    scope = {'__builtins__': {'int': int, 'bool': bool, 'tuple': tuple, 'isinstance': isinstance,
+                              'TypeError': TypeError, 'ValueError': ValueError}}
+    exec(compile(tree, str(path), 'exec'), scope)
+    function = scope[tree.body[0].name]
+    a, b = 0, 1
+    for n in range(1001):
+        assert function(n) == a, (path.name, n)
+        a, b = b, a + b
+    invalid = []
+    for value, expected in [(-1, ValueError), (-100, ValueError), (1.5, TypeError),
+                            ('10', TypeError), (None, TypeError), (True, TypeError)]:
+        try:
+            function(value)
+        except expected:
+            invalid.append(repr(value))
+        else:
+            raise AssertionError((path.name, 'invalid input accepted', value))
+    rows.append({'response': path.name, 'function': tree.body[0].name,
+                 'reference_matches': 1001, 'invalid_inputs_rejected': invalid,
+                 'stop_type': response['stop_type'],
+                 'scope': 'function results and input validation only; proof reviewed separately'})
+result = {'checks': rows}
+(root / 'fa-qr-ab-quality-validation.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
+print(json.dumps(result, indent=2))

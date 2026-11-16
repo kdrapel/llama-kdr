@@ -2,6 +2,26 @@
 
 The prototype did not improve the measured 8K workload. The single 64K pair measured a 19.4% decode improvement with identical fixed-length output, but substantial prefill variation prevents treating that pair as a confirmed kernel-only gain. The isolated 6.75x attention result does not translate into a general generation speedup.
 
+## 96K follow-up: 98304 prompt tokens, 256 output tokens
+
+One fresh-process candidate/stock pair used exactly the same request, binaries and settings as the earlier protocol, with the history extended to 98304 tokens. This reverses the order of the earlier 64K pair. Both measured requests had `cache_n=0`, 256 generated tokens, `truncated=false`, and normal token-limit stops. No kernel changes or rebuilds occurred.
+
+| Metric | Stock | Candidate |
+| --- | ---: | ---: |
+| Prefill throughput, tok/s | 135.342 | 157.824 |
+| Prefill time, seconds | 726.335 | 622.873 |
+| Generation throughput, tok/s | 19.675 | 33.642 |
+| Generation time, seconds | 12.960 | 7.580 |
+| Request wall time, seconds | 739.354 | 630.522 |
+| Draft accepted/proposed | 205/294 | 210/266 |
+| Draft acceptance | 69.728% | 78.947% |
+
+The candidate measured 70.98% higher generation throughput and 16.61% higher prefill throughput. Prefill latency was 14.24% lower, saving 103.463 seconds. These are measured differences in one pair, not established causal kernel speedups. Bulk prefill uses width 512, outside the prototype's 1-8 token gate, so its large timing difference is a run-variation/confounding signal. No prefill optimization was introduced by this measurement task.
+
+The generated outputs differ from token index 3 (zero-based), and draft acceptance also differs materially. Both 256-token responses are incomplete reasoning text about the Fibonacci task. Therefore generation work is not identical, and this sample does not establish completed-answer quality or a kernel-only 70.98% improvement. Do not compare the 96K absolute throughput with 64K as a controlled context-scaling curve: the prompt contents, output and acceptance differ.
+
+All 96K raw data and previous measurements are now retained outside the build tree in `docs/development/measurements/rdna4-q4/`. The exact 96K request is `fa-qr-ab-96k-20261116.request.json`; individual samples are in `.summary.json`, and calculated comparisons including prefill gains are in `fa-qr-ab-96k-20261116.comparison-v2.json`. The earlier comparison files were preserved. `fa-qr-ab-comparison-through-96k-20261116-v2.json` combines the saved 8K, 64K and 96K statistics while retaining individual samples. The reusable harness is `tools/dspine-fattn-ab.py`, which defaults to this persistent archive and rejects existing run tags. User direction is to always retain measured statistics, including failures and validity limits.
+
 ## Method
 
 - RX 9060 XT gfx1200; GSQ-RCO target `Qwen3.8-27B-GSQ-RCO-IQ3_XXS.gguf`, DSpine draft `Qwen3.8-27B-DSpine-b16-Q4_K_M.gguf`.
@@ -36,7 +56,7 @@ Neither full answer is free of explanatory errors. Stock drops a square from the
 
 Do not treat the current broad 1-8 token gate as an established inference-speed improvement. A possible long-context benefit merits a reversed 64K repeat; the 8K results argue against enabling this path indiscriminately. This A/B task did not change kernel dispatch, rebuild binaries, commit, or push.
 
-Artifacts are under `build-rocm/bench/`:
+Earlier artifacts originated under `build-rocm/bench/` and have also been copied to the persistent `docs/development/measurements/rdna4-q4/` archive:
 
 - `run_fa_qr_ab.py`: harness, using the saved baseline settings and fresh-process cleanup.
 - `fa-qr-ab-{8k,64k}-20261116.request.json`: exact request token arrays and sampling settings.
@@ -46,4 +66,4 @@ Artifacts are under `build-rocm/bench/`:
 - `fa-qr-ab-comparison.json`: calculated means, relative changes and request/output equality checks.
 - `validate_fa_qr_quality.py` and `fa-qr-ab-quality-validation.json`: generated-function validation.
 
-The build directory is ignored by Git. Preserve these files separately if replacing or cleaning the build tree.
+The build directory is ignored by Git. The persistent archive now keeps these measurements outside that tree; new measurements must use that archive or another durable source location.

@@ -1,0 +1,4 @@
+context_tokens,generation_tok_s_mean,generation_tok_s_min,generation_tok_s_max,prefill_tok_s_mean,prefill_tok_s_min,prefill_tok_s_max,sample_count
+8192,28.42,27.63,29.21,273.95,217.87,330.02,2
+16384,28.75,28.74,28.75,227.04,201.77,252.32,2
+32768,26.69,25.61,27.76,231.49,224.64,238.35,2

@@ -1,5 +1,27 @@
 # Intermediate handoff: 2026-11-16
 
+## Measurement retention requirement
+
+User direction (2026-11-16): always keep every measured statistic. Save raw timing/acceptance, exact requests, commands/environment, responses and binary hashes under `docs/development/measurements/rdna4-q4/`, not only inside the disposable build tree. Keep prior samples; use distinct run tags instead of overwriting. Record failures and validity limits alongside successful runs. The 8K/64K A/B artifacts and isolated kernel timing data have been copied there. The 98304-token prompt, 256-output-token candidate/stock follow-up is complete. New harness `tools/dspine-fattn-ab.py` defaults to this archive and refuses existing request/summary tags.
+
+## Latest measurement: 96K, 256 output tokens
+
+### Later short-context audit and historical CSV check
+
+- User reports prior fresh GSQ-RCO singleton-question rates of 35-40 tok/s, sometimes 55. Exact current prompt `What is a singleton in C#?` renders to 48 tokens. Same 131072 capacity, temperature 0.6, seed 42 and DFlash width 6, fresh server per sample.
+- Fixed 256-token candidate/stock/stock/candidate: candidate 28.450/28.587 tok/s, mean 28.519; stock 29.441/29.369, mean 29.405. Candidate is 3.014% slower. Acceptance repeats at 185/416 candidate versus 188/388 stock; outputs differ across variants. Full-answer pair: stock 643 tokens at 28.095 tok/s; candidate 708 at 29.605; both EOS, but different output lengths prevent a direct latency comparison.
+- User specifically requested historical CSV checks. `dspine-rocm-speed-curve-gsq-rco-8k-100k.csv` records GSQ 8K generation 45.733 tok/s from two 96-output-token runs with 78/102 draft acceptance. The `bc7c78ef95ac8b65ae50eeff7d02b544d6cc62ee` curve already records GSQ 8K 28.420 tok/s for 256 outputs, with 195/360 acceptance, before the new attention kernel. Both use temperature 0.6, but prompts, lengths and binaries differ. The 1K-96K curve reporting rates up to 55 tok/s is labeled UD-IQ2, not GSQ. None of those named GSQ curves contains the empty singleton prompt.
+- Policy discussion: populated KV length and query width are useful dispatch inputs; allocated capacity alone is not. Measure 16K/32K crossover and distinguish nb=1 from verification batches before choosing thresholds. Low short-prompt acceptance also motivates a separate draft-width sweep. No dispatch or draft-width policy was changed.
+- Full report: `docs/development/dspine-rocm-short-context-audit.md`. Every sample and historical comparison is retained in the measurement archive, including `fa-qr-ab-singleton-20261116*`, `fa-qr-ab-singleton-full-20261116*` and `historical-gsq-and-singleton-audit-20261116.json`. Harness now supports exact prompt text, sampling temperature and EOS-complete requests.
+- Existing user-created commit `f7ccf262f` contains three MMVQ files. It does not include the measurement archive/report. The earlier request to commit measurements remained pending after the staging turn was interrupted.
+
+- One candidate/stock pair, same binaries and settings as the prior checks, exact same 98304-token prompt, greedy sampling, profiling off and zero prompt-cache reuse. Both emitted exactly 256 tokens and completed without inference errors; processes were cleaned up.
+- Candidate: prefill 622.872609 s / 157.823604 tok/s; generation 7.579862 s / 33.641773 tok/s; acceptance 210/266 (78.947%); wall time 630.521724 s.
+- Stock: prefill 726.335260 s / 135.342459 tok/s; generation 12.960412 s / 19.675300 tok/s; acceptance 205/294 (69.728%); wall time 739.353807 s.
+- Measured candidate differences: generation throughput +70.9848%; prefill throughput +16.6106%; prefill latency -14.2445%, saving 103.462651 s. Outputs differ from token index 3, and acceptance changes. Bulk prefill width 512 is outside the new gate. These are single-pair observed gains with confounding, not confirmed kernel-only speedups or a prefill optimization.
+- Preserve every sample. Exact requests, full responses, hashes, commands, logs and derived statistics are in `docs/development/measurements/rdna4-q4/fa-qr-ab-96k-20261116*`; latest aggregate is `fa-qr-ab-comparison-through-96k-20261116-v2.json`. Earlier aggregates were kept. Full report: `docs/development/dspine-rocm-rdna4-q4-ab.md`.
+- No kernel changes, rebuilds or additional commits were made for this run. Previous requested commit is `7dfebaa12`. Source is still broadly enabled for eligible 1-8 token calls. Confirm gains with reversed repeats and matched generated work before deciding on dispatch; do not infer a context-scaling curve from different outputs/prompts.
+
 ## Latest continuation: dense RDNA4 Q4 decode
 
 ### Real-model A/B completed (2026-11-16)

@@ -1,0 +1,190 @@
+{
+  "8k": {
+    "candidate": {
+      "samples": 2,
+      "generation_tps_mean": 29.42123158388102,
+      "generation_tps_runs": [
+        27.70842220855032,
+        31.13404095921172
+      ],
+      "prefill_tps_mean": 216.7376109825932,
+      "draft_accepted": [
+        204,
+        204
+      ],
+      "draft_proposed": [
+        301,
+        301
+      ],
+      "output_sha256": [
+        "15cd2cd38688f01b98fbc4b37a0b552552552c50c023eff8e5338d0dca21d0d2"
+      ]
+    },
+    "stock": {
+      "samples": 2,
+      "generation_tps_mean": 31.89604088962574,
+      "generation_tps_runs": [
+        31.90923062715528,
+        31.8828511520962
+      ],
+      "prefill_tps_mean": 208.03790288975927,
+      "draft_accepted": [
+        206,
+        206
+      ],
+      "draft_proposed": [
+        294,
+        294
+      ],
+      "output_sha256": [
+        "5ccee4d4724934e5692ec5ff4189ba8d05737c128bad2a88b6a2cc56dea67844"
+      ]
+    },
+    "generation_change_percent": -7.758985870091662,
+    "identical_output_between_variants": false,
+    "all_prompts_uncached": true,
+    "same_request": true
+  },
+  "64k": {
+    "candidate": {
+      "samples": 1,
+      "generation_tps_mean": 26.073187744742878,
+      "generation_tps_runs": [
+        26.073187744742878
+      ],
+      "prefill_tps_mean": 184.2219079939133,
+      "draft_accepted": [
+        206
+      ],
+      "draft_proposed": [
+        290
+      ],
+      "output_sha256": [
+        "0fd7115e835cfe59477e16dfebf0185b41e38ad2a4e346d651ae08e4a492dfc3"
+      ]
+    },
+    "stock": {
+      "samples": 1,
+      "generation_tps_mean": 21.828977239653064,
+      "generation_tps_runs": [
+        21.828977239653064
+      ],
+      "prefill_tps_mean": 157.85769913664683,
+      "draft_accepted": [
+        206
+      ],
+      "draft_proposed": [
+        292
+      ],
+      "output_sha256": [
+        "0fd7115e835cfe59477e16dfebf0185b41e38ad2a4e346d651ae08e4a492dfc3"
+      ]
+    },
+    "generation_change_percent": 19.44301127118344,
+    "identical_output_between_variants": true,
+    "all_prompts_uncached": true,
+    "same_request": true
+  },
+  "same_binaries_across_stages": true,
+  "96k": {
+    "context_tokens": 98304,
+    "output_tokens": 256,
+    "samples_per_variant": 1,
+    "order": [
+      "candidate",
+      "stock"
+    ],
+    "candidate": {
+      "trial": 1,
+      "variant": "candidate",
+      "context_tokens": 98304,
+      "wall_s": 630.5217236999888,
+      "request_sha256": "1b2c92b879611fb0c5d7987597d04643b2f5a6dcf41e75aa08e082a9576fbc88",
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 98304,
+        "prompt_ms": 622872.609,
+        "prompt_per_token_ms": 6.33618783569336,
+        "prompt_per_second": 157.82360402365998,
+        "predicted_n": 256,
+        "predicted_ms": 7579.862,
+        "predicted_per_token_ms": 29.724949019607845,
+        "predicted_per_second": 33.64177342542648,
+        "draft_n": 266,
+        "draft_n_accepted": 210
+      },
+      "tokens_evaluated": 98304,
+      "truncated": false,
+      "stop_type": "limit",
+      "output_sha256": "a0ef099d6aa1dc70dc10f6fdb9f93646c2daca055a5424280ef2dd13fd62bb56",
+      "output_token_sha256": "711bbc78f16239846cc99001ae0f323132829c3d7f513fe183e2d881684c5bb7",
+      "output_characters": 631,
+      "response_file": "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\docs\\development\\measurements\\rdna4-q4\\fa-qr-ab-96k-20261116-1-candidate.response.json",
+      "acceptance_percent": 78.94736842105263,
+      "additional_server_stats": [
+        "10.42.637.121 I slot print_timing: id  0 | task 0 |    graphs reused =         43",
+        "10.42.637.122 I slot print_timing: id  0 | task 0 |   graph reallocs =        194    /     0        (same size) / (changed size)",
+        "10.42.637.134 I slot print_timing: id  0 | task 0 |      acc per pos = (0.933, 0.889, 0.844, 0.756, 0.667, 0.578)",
+        "10.42.638.875 I spec common_specu: statistics    draft-dflash2: #calls(b,g,a) =    1     45     45, #gen drafts =     45, #acc drafts =    42, #gen tokens =    266, #acc tokens =   210, #mean acc len = 5.67, #acc rate/pos = (0.933, 0.889, 0.844, 0.756, 0.667, 0.578), dur(b,g,a) = 0.001, 2101.569, 1.069 ms"
+      ]
+    },
+    "stock": {
+      "trial": 2,
+      "variant": "stock",
+      "context_tokens": 98304,
+      "wall_s": 739.3538071999792,
+      "request_sha256": "1b2c92b879611fb0c5d7987597d04643b2f5a6dcf41e75aa08e082a9576fbc88",
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 98304,
+        "prompt_ms": 726335.26,
+        "prompt_per_token_ms": 7.388664347330729,
+        "prompt_per_second": 135.3424587978835,
+        "predicted_n": 256,
+        "predicted_ms": 12960.412,
+        "predicted_per_token_ms": 50.825145098039215,
+        "predicted_per_second": 19.675300445695704,
+        "draft_n": 294,
+        "draft_n_accepted": 205
+      },
+      "tokens_evaluated": 98304,
+      "truncated": false,
+      "stop_type": "limit",
+      "output_sha256": "e16c4114eb5c63c3bb7319e21bdf680cd94d37ee3329c17ac89cc5e20fdadbdc",
+      "output_token_sha256": "64fa2a68ed16ab828121e44da418eb8dbc34591b019898686ebc4dbd7cb0575e",
+      "output_characters": 686,
+      "response_file": "D:\\09-AI\\02-inference-llama\\Ajay9o9\\dspine\\docs\\development\\measurements\\rdna4-q4\\fa-qr-ab-96k-20261116-2-stock.response.json",
+      "acceptance_percent": 69.72789115646259,
+      "additional_server_stats": [
+        "12.28.400.122 I slot print_timing: id  0 | task 0 |    graphs reused =         47",
+        "12.28.400.123 I slot print_timing: id  0 | task 0 |   graph reallocs =        194    /     0        (same size) / (changed size)",
+        "12.28.400.133 I slot print_timing: id  0 | task 0 |      acc per pos = (0.960, 0.820, 0.660, 0.620, 0.580, 0.460)",
+        "12.28.400.159 I spec common_specu: statistics    draft-dflash2: #calls(b,g,a) =    1     50     50, #gen drafts =     50, #acc drafts =    48, #gen tokens =    294, #acc tokens =   205, #mean acc len = 5.10, #acc rate/pos = (0.960, 0.820, 0.660, 0.620, 0.580, 0.460), dur(b,g,a) = 0.001, 2256.284, 0.025 ms"
+      ]
+    },
+    "generation_change_percent": 70.98480157026607,
+    "prefill_throughput_change_percent": 16.610563621685912,
+    "prefill_latency_change_percent": -14.244475891202079,
+    "prefill_seconds_saved": 103.46265099999995,
+    "same_request": true,
+    "all_uncached": true,
+    "all_contexts_exact": true,
+    "all_outputs_exact": true,
+    "identical_output_tokens": false,
+    "first_differing_output_token_index": 3,
+    "binary_sha256": {
+      "llama-server.exe": "6e44dc302d0aa20bf33a889c05dcf283694a071eeb66c2ae4d3aca7e60631110",
+      "llama-server-impl.dll": "6bd856dcd2e74723fad648f3cc5b02cf0728e2356e71efe494f1f81a6854dce4",
+      "ggml-hip.dll": "d977897de9ab2e16ea94c94ffdd2a26790740454bbe052ff40334c9164af6d50",
+      "llama.dll": "b898ff37a484fd8736d62cbcd15e71b169081cd4e96cc98e3b28e0bb9a731cf5",
+      "ggml-base.dll": "a91a70cbf0cd093bbf97eb2e83e63549e0dbce2024416e70e02056a463dc3446"
+    },
+    "same_binaries_as_8k_64k": true,
+    "limitations": [
+      "Single candidate/stock pair; run-to-run variation remains.",
+      "Outputs and draft acceptance differ, so generated work is not identical.",
+      "Prefill varies despite bulk prefill width being outside the prototype gate.",
+      "The fixed-length responses do not establish completed-answer quality."
+    ]
+  }
+}

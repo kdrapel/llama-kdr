@@ -1,5 +1,20 @@
 # DSpine ROCm optimization progress
 
+## Singleton and historical CSV audit (2026-11-16)
+
+- Fresh exact `What is a singleton in C#?` requests render to 48 prompt tokens at 131072 capacity. Temperature 0.6, seed 42, DFlash width 6, profiling off and no cache reuse. Fixed 256-output-token candidate/stock/stock/candidate results: candidate mean 28.519 tok/s versus stock 29.405 (-3.014%); acceptance 185/416 versus 188/388. Outputs differ. Separate complete answers: candidate 708 tokens at 29.605 tok/s, stock 643 at 28.095, both EOS. Different answer lengths prevent a matched full-answer speed claim.
+- The user-named GSQ 8K-100K CSV records 45.733 tok/s at 8K with 96 outputs and 78/102 draft acceptance. The commit-specific `bc7c78e` CSV already records GSQ 8K at 28.420 tok/s with 256 outputs and 195/360 acceptance before the WMMA prototype. Historical prompts/binaries/lengths differ, so the lower current rate cannot be assigned solely to the new attention gate. The 1K-96K curve with rates near 55 tok/s is UD-IQ2 rather than GSQ.
+- Context-aware dispatch should use populated KV length and query width, not allocated capacity. Short/long samples suggest different strategies could help; intermediate thresholds and separate one-token/verification-batch behavior still need measurements. A draft-width sweep is a separate candidate because short-prompt acceptance is low. No runtime policy changes were made.
+- See `dspine-rocm-short-context-audit.md` and the retained `measurements/rdna4-q4/fa-qr-ab-singleton*` raw samples and `historical-gsq-and-singleton-audit-20261116.json`. The reusable harness now supports exact prompt text and EOS-complete comparisons. Preserve all stats.
+
+## Populated 96K attention A/B, 256 output tokens (2026-11-16)
+
+- Ran one candidate/stock pair at exactly 98304 prompt tokens with 256 generated tokens, same binaries/settings as the earlier 8K/64K checks, profiling off and zero prompt-cache reuse. Both runs finished without truncating context or reporting inference errors. Binary hashes match the previous stages.
+- Candidate generation: 33.6418 tok/s, 7.5799 s, 210/266 draft acceptance (78.947%). Stock: 19.6753 tok/s, 12.9604 s, 205/294 acceptance (69.728%). The measured throughput difference is +70.9848%, but outputs differ from token index 3 and acceptance changes, so this is not an isolated kernel speedup.
+- Candidate prefill: 622.8726 s / 157.8236 tok/s. Stock: 726.3353 s / 135.3425 tok/s. Measured prefill throughput is +16.6106%, latency -14.2445%, saving 103.4627 s. Bulk prefill width 512 is outside this kernel's gate; treat this as confounding/run variation until repeated, not proof of a prefill optimization.
+- Total request wall time: 630.5217 s candidate versus 739.3538 s stock. These fixed-length responses remain in reasoning; no completed-answer quality conclusion follows from this sample. Both server processes were cleaned up.
+- User requires all measured statistics to be retained. Raw prior/current samples, exact request token arrays, full responses, logs, commands/environment, binary hashes, calculated gains and quality checks now live in `docs/development/measurements/rdna4-q4/`, outside the disposable build tree. See `fa-qr-ab-96k-20261116.comparison-v2.json` and `fa-qr-ab-comparison-through-96k-20261116-v2.json`; older samples/aggregates were preserved. Reusable harness: `tools/dspine-fattn-ab.py`. Full report: `dspine-rocm-rdna4-q4-ab.md`.
+
 ## Real-model RDNA4 Q4 attention A/B (2026-11-16)
 
 - Ran unprofiled, fresh-process GSQ-RCO/DSpine requests with matched greedy sampling, seed 42, 256 generated tokens, 131072 capacity, Q4_0 target KV and DFlash n_max=6. Same binaries and request tokens within each depth; every measured request had zero cache reuse.

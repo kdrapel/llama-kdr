@@ -1,0 +1,114 @@
+[
+  {
+    "variant": "candidate",
+    "trial": 1,
+    "kv": 8192,
+    "nb": 1,
+    "us": 46.05
+  },
+  {
+    "variant": "candidate",
+    "trial": 1,
+    "kv": 8192,
+    "nb": 7,
+    "us": 162.3
+  },
+  {
+    "variant": "candidate",
+    "trial": 1,
+    "kv": 65536,
+    "nb": 1,
+    "us": 294.49
+  },
+  {
+    "variant": "candidate",
+    "trial": 1,
+    "kv": 65536,
+    "nb": 7,
+    "us": 876.34
+  },
+  {
+    "variant": "candidate",
+    "trial": 2,
+    "kv": 8192,
+    "nb": 1,
+    "us": 46.35
+  },
+  {
+    "variant": "candidate",
+    "trial": 2,
+    "kv": 8192,
+    "nb": 7,
+    "us": 162.03
+  },
+  {
+    "variant": "candidate",
+    "trial": 2,
+    "kv": 65536,
+    "nb": 1,
+    "us": 294.23
+  },
+  {
+    "variant": "candidate",
+    "trial": 2,
+    "kv": 65536,
+    "nb": 7,
+    "us": 876.59
+  },
+  {
+    "variant": "stock",
+    "trial": 1,
+    "kv": 8192,
+    "nb": 1,
+    "us": 188.79
+  },
+  {
+    "variant": "stock",
+    "trial": 1,
+    "kv": 8192,
+    "nb": 7,
+    "us": 894.62
+  },
+  {
+    "variant": "stock",
+    "trial": 1,
+    "kv": 65536,
+    "nb": 1,
+    "us": 1309.85
+  },
+  {
+    "variant": "stock",
+    "trial": 1,
+    "kv": 65536,
+    "nb": 7,
+    "us": 5932.41
+  },
+  {
+    "variant": "stock",
+    "trial": 2,
+    "kv": 8192,
+    "nb": 1,
+    "us": 189.78
+  },
+  {
+    "variant": "stock",
+    "trial": 2,
+    "kv": 8192,
+    "nb": 7,
+    "us": 966.66
+  },
+  {
+    "variant": "stock",
+    "trial": 2,
+    "kv": 65536,
+    "nb": 1,
+    "us": 1294.76
+  },
+  {
+    "variant": "stock",
+    "trial": 2,
+    "kv": 65536,
+    "nb": 7,
+    "us": 5907.3
+  }
+]
