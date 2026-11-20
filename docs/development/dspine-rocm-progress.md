@@ -1,5 +1,19 @@
 # DSpine ROCm optimization progress
 
+## Reconstructed build: fresh singleton conversation, complete answer (2026-11-16)
+
+- User clarified the request: no history, ask exactly `What is a singleton in C#?`, let the reconstruction finish the whole answer. This is not a new 8K or fixed-1024-output run. The reconstruction is unchanged (`d78cbd3bc` plus isolated documented Q2_K hipBLAS route).
+- Fresh server, 48 rendered prompt tokens, zero cache reuse, capacity 131072, temperature 0.6, seed 42, DFlash width 6. Allowed up to 4096 output tokens; completed naturally at EOS after 656, without context truncation.
+- Generation 23.299591 tok/s / 28.112081 s; prefill 1.847560 s; request wall 29.961353 s. Draft acceptance 468/1122 = 41.711%. This one sample does not reproduce the recalled 35-55 tok/s. Different outputs and build states prevent treating earlier complete-answer rates as matched controls.
+- Full raw and readable generation, stats, request, commands, response, hashes and log retained as `measurements/rdna4-q4/reconstructed-pre-bc7-singleton-full-20261116*`. No production code changes; server cleaned up.
+
+## Matched pre-bc7c 8K/256 comparison (2026-11-16)
+
+- All new runs use the same exact saved 8192-token conversation, 256 generated tokens, temperature 0.6, seed 42, fresh server, profiling off and zero cache reuse. Do not mix the old 96-token curve into these averages. Raw data and provenance are retained in `measurements/rdna4-q4/`.
+- Clean parent `d78cbd3bc` rebuilt in an isolated detached worktree with 147 matched GGML/llama CMake options. Two runs per build: parent mean 29.869 tok/s (27.114/32.623), current 29.842 (30.578/29.106), current -0.090%; prefill 145.870 versus 201.150 tok/s. This clean parent lacks the uncommitted Q2_K route documented for the earlier fast curve.
+- A separately labeled reconstruction adds only that eight-line five-shape Q2_K hipBLAS route to the old isolated source. Reconstruction/current/current/reconstruction: 31.174 versus 29.759 tok/s means, current -4.541%; prefill 201.556 versus 203.094 tok/s. Acceptance is 201/322 versus 193/369, with different outputs and 54 versus 62 draft calls. The original historical binaries are unavailable, so this is not exact historical source/binary recovery or a kernel-only performance comparison.
+- The closer reconstruction supports a modest 8K slowdown; the historical 45-47 tok/s point is not reproduced at 256 outputs. Isolate WMMA enable/disable on the same request next before blaming a specific commit or changing the default gate. Current production code/binaries were preserved; pure-parent binaries and patched historical worktree remain available. Full report: `dspine-rocm-pre-bc7-8k-256.md`; combined stats: `pre-bc7-8k-256-20261116.all-comparisons.json`.
+
 ## Singleton and historical CSV audit (2026-11-16)
 
 - Fresh exact `What is a singleton in C#?` requests render to 48 prompt tokens at 131072 capacity. Temperature 0.6, seed 42, DFlash width 6, profiling off and no cache reuse. Fixed 256-output-token candidate/stock/stock/candidate results: candidate mean 28.519 tok/s versus stock 29.405 (-3.014%); acceptance 185/416 versus 188/388. Outputs differ. Separate complete answers: candidate 708 tokens at 29.605 tok/s, stock 643 at 28.095, both EOS. Different answer lengths prevent a matched full-answer speed claim.

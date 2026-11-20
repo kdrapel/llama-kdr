@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdlib>
 #include <cinttypes>
 #include <deque>
 #include <exception>
@@ -410,6 +411,7 @@ struct server_slot {
     std::unique_ptr<server_realtime_slot> rt;
 
     server_slot_stats stats;
+    bool dflash_delayed_prefill = false;
 
     // accepted tokens per draft position
     // not in server_slot_stats to avoid copying to every task result
@@ -426,6 +428,7 @@ struct server_slot {
         SLT_DBG(*this, "%s", "\n");
 
         spec_is_replay = false;
+        dflash_delayed_prefill = false;
 
         last_nl_pos    = 0;
         generated      = {};
@@ -668,7 +671,8 @@ struct server_slot {
 
             // do not keep context of the child slots - the parent's context is enough
             // nor of the stateless slots - no task ever reuses it
-            if (task->is_child() || task->is_stateless() || audio_stream || task->type == SERVER_TASK_TYPE_REALTIME) {
+            // Delayed DFlash prefill omits the draft KV for the early prompt.
+            if (dflash_delayed_prefill || task->is_child() || task->is_stateless() || audio_stream || task->type == SERVER_TASK_TYPE_REALTIME) {
                 prompt_clear();
             }
 
@@ -1090,6 +1094,39 @@ private:
 
     common_speculative_init_result_ptr spec_init;
 
+    static constexpr int32_t dflash_prefill_window = 8192;
+    bool dflash_delay_prefill = false;
+    bool dflash_capture_paused = false;
+
+    bool set_dflash_capture_paused(bool paused) {
+        if (dflash_capture_paused == paused) {
+            return true;
+        }
+
+        llama_synchronize(ctx_tgt);
+        llama_synchronize(ctx_dft);
+        if (paused) {
+            llama_set_embeddings_layer_inp_dev(ctx_tgt, false);
+        }
+        const auto * layers = llama_model_target_layer_ids(model_dft);
+        for (uint32_t i = 0; i < llama_model_target_layer_ids_n(model_dft); ++i) {
+            llama_set_embeddings_layer_inp(ctx_tgt, layers[i], !paused);
+        }
+        if (!paused) {
+            llama_set_embeddings_layer_inp_dev(ctx_tgt, true);
+            if (!llama_supports_embd_row(ctx_dft)) {
+                return false;
+            }
+            // Rebuild the draft graph for the replacement feature buffer.
+            llama_set_embeddings_nextn(ctx_dft, false, false);
+            llama_set_embeddings_nextn(ctx_dft, true, false);
+        }
+
+        dflash_capture_paused = paused;
+        SRV_INF("DFlash prefill capture=%d\n", int(!paused));
+        return true;
+    }
+
     common_context_seq_rm_type ctx_tgt_seq_rm_type = COMMON_CONTEXT_SEQ_RM_TYPE_NO;
     common_context_seq_rm_type ctx_dft_seq_rm_type = COMMON_CONTEXT_SEQ_RM_TYPE_NO;
 
@@ -1136,6 +1173,7 @@ private:
     int64_t t_last_load_progress_ms = 0;
 
     void destroy() {
+        dflash_capture_paused = false;
         spec.reset();
         spec_init.reset();
 
@@ -1520,6 +1558,15 @@ private:
             SRV_ERR("%s", "synthetic acceptance requires an initialized speculative decoding context\n");
             return false;
         }
+
+        const char * delay_prefill = std::getenv("LLAMA_DFLASH_DELAY_PREFILL");
+        const auto & spec_types = params_base.speculative.types;
+        dflash_delay_prefill = delay_prefill && std::string_view(delay_prefill) == "1" &&
+                slots.size() == 1 && !mctx && spec && ctx_dft && model_dft && spec_types.size() == 1 &&
+                (spec_types.front() == COMMON_SPECULATIVE_TYPE_DRAFT_DFLASH ||
+                 spec_types.front() == COMMON_SPECULATIVE_TYPE_DRAFT_DFLASH2) &&
+                llama_model_dflash_variant(model_dft) == LLAMA_DFLASH_VARIANT_DFLASH2 &&
+                llama_model_n_swa(model_dft) == dflash_prefill_window && llama_supports_embd_row(ctx_dft);
 
         for (int i = 0; i < params_base.n_parallel; i++) {
             server_slot & slot = slots[i];
@@ -3558,6 +3605,10 @@ private:
     }
 
     void update_slots() {
+        if (dflash_capture_paused && !slots.front().dflash_delayed_prefill && !set_dflash_capture_paused(false)) {
+            abort_all_slots("failed to restore DFlash device features");
+            return;
+        }
 #ifdef DEBUG_TIMINGS
         static int64_t t_prev = 0;
         int64_t t_start = ggml_time_us();
@@ -3650,13 +3701,25 @@ private:
         int32_t off_next = 0;
         int32_t n_batch = llama_n_batch(ctx_tgt);
         for (int32_t off = 0; off < batch.size(); off = off_next) {
-            const int32_t n_tokens = std::min(n_batch, batch.size() - off);
+            int32_t n_tokens = std::min(n_batch, batch.size() - off);
             try {
                 scoped_timer t(t_decode, n_decode);
                 // TODO @ngxson : maybe handle n_batch == 1 here instead of inside decode()
 
+                bool skip_injection = false;
+                if (dflash_delay_prefill && slots.front().dflash_delayed_prefill) {
+                    const auto & first = batch.tokens[off];
+                    skip_injection = first.is_prompt && first.pos[0] < dflash_prefill_window;
+                    if (skip_injection) {
+                        n_tokens = std::min(n_tokens, dflash_prefill_window - first.pos[0]);
+                    }
+                    if (!set_dflash_capture_paused(skip_injection)) {
+                        throw std::runtime_error("failed to restore DFlash device features");
+                    }
+                }
+
                 batch.render(off, n_tokens);
-                bool ok = decode(n_batch, off);
+                bool ok = decode(n_batch, off, skip_injection);
 #ifdef DEBUG_TIMINGS
                 llama_synchronize(ctx_tgt);
 #endif
@@ -4347,6 +4410,10 @@ private:
 
                         slot.stats.n_prompt_cached    = n_past;
                         slot.stats.n_prompt_processed = 0;
+                        slot.dflash_delayed_prefill = dflash_delay_prefill && n_past == 0 &&
+                                slot.task->type == SERVER_TASK_TYPE_COMPLETION && !slot.task->params.cache_prompt &&
+                                !slot.task->is_child() && !slot.task->is_parent() &&
+                                slot.task->n_tokens() == 2 * dflash_prefill_window;
 
                         metrics.add_prompt_cached(n_past);
 
@@ -4681,7 +4748,7 @@ private:
 
     // returns true = success ; false = retry with smaller batch size
     // throw std::runtime_error on fatal error
-    bool decode(int32_t & n_batch, int32_t off) {
+    bool decode(int32_t & n_batch, int32_t off, bool skip_injection) {
         SRV_DBG("n_batch (effective) = %d, off = %d\n", n_batch, off);
 
         metrics_pre_decode();
@@ -4778,7 +4845,7 @@ private:
         // TODO: avoid restoring the draft context and re-evaluating the drafted tokens when not needed [TAG_SPEC_AVOID_DRAFT_REEVAL]
         //       for now, always re-evaluate for simplicity
         //       ref: https://github.com/ggml-org/llama.cpp/pull/22728#issuecomment-4400925384
-        if (spec) {
+        if (spec && !skip_injection) {
             bool ok = true;
             queue_tasks.yield_to_queue([&]() {
                 ok = common_speculative_process(spec.get(), batch.view);

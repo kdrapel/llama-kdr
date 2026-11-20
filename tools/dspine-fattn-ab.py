@@ -19,29 +19,50 @@ parser = argparse.ArgumentParser(description=__doc__)
 workload = parser.add_mutually_exclusive_group(required=True)
 workload.add_argument('--size', type=int, choices=[8192, 65536, 98304])
 workload.add_argument('--prompt-text')
+workload.add_argument('--request-file', type=Path)
 parser.add_argument('--temperature', type=float, default=0)
 parser.add_argument('--n-predict', type=int, default=256)
 parser.add_argument('--allow-eos', action='store_true')
+parser.add_argument('--exact-saved-history', action='store_true')
+parser.add_argument('--baseline-bin', type=Path)
 parser.add_argument('--order', default='candidate,stock,stock,candidate')
+parser.add_argument('--draft-order', type=int, nargs='+', choices=[2, 4, 6])
+parser.add_argument('--compare-speculation', action='store_true',
+                    help='compare DSpine with speculation and draft-model loading disabled')
 parser.add_argument('--tag', required=True)
 parser.add_argument('--quality', action='store_true')
 parser.add_argument('--output-dir', type=Path, default=OUT)
 args = parser.parse_args()
+if args.compare_speculation and (args.baseline_bin or args.draft_order):
+    parser.error('--compare-speculation requires the same binary and a fixed draft width')
 OUT = args.output_dir.resolve()
 OUT.mkdir(parents=True, exist_ok=True)
 variants = args.order.split(',')
+if args.draft_order:
+    if args.baseline_bin:
+        parser.error('--draft-order uses the current binary for every trial')
+    variants = ['candidate'] * len(args.draft_order)
+comparison_mode = ('speculation' if args.compare_speculation else
+                   'draft_width' if args.draft_order else
+                   'different_builds' if args.baseline_bin else 'same_binary_dispatch')
 assert all(v in ('candidate', 'stock') for v in variants)
 assert args.tag.replace('-', '').replace('_', '').isalnum()
 assert args.n_predict > 0
+assert not args.exact_saved_history or args.size == 8192
 source = json.loads((ROOT / 'docs/development/dspine-rocm-prefill-results.json').read_text())
 command = [v.replace('\\\\', '\\') for v in source['cases']['baseline']['command']['argv']]
 command[0] = str(ROOT / 'build-rocm/bin/llama-server.exe')
 command[command.index('-m') + 1] = 'D:/40-49 Assets/44 AI Models/Qwen3.8-27B-GSQ-RCO-IQ3_XXS.gguf'
 command[command.index('--alias') + 1] = 'GSQ-RCO-FA-AB'
 command[command.index('--temp') + 1] = str(args.temperature)
-binary_hashes = {}
-for name in ['llama-server.exe', 'llama-server-impl.dll', 'ggml-hip.dll', 'llama.dll', 'ggml-base.dll']:
-    binary_hashes[name] = hashlib.sha256((ROOT / 'build-rocm/bin' / name).read_bytes()).hexdigest()
+current_bin = ROOT / 'build-rocm/bin'
+variant_bins = {'candidate': current_bin, 'stock': args.baseline_bin.resolve() if args.baseline_bin else current_bin}
+variant_hashes = {}
+for variant, bin_path in variant_bins.items():
+    variant_hashes[variant] = {}
+    for name in ['llama-server.exe', 'llama-server-impl.dll', 'ggml-hip.dll', 'llama.dll', 'ggml-base.dll']:
+        variant_hashes[variant][name] = hashlib.sha256((bin_path / name).read_bytes()).hexdigest()
+binary_hashes = variant_hashes['candidate']
 
 
 def write(path, value):
@@ -62,6 +83,22 @@ def tokenize(content, add_special):
 
 
 def make_request():
+    if args.request_file is not None:
+        request = json.loads(args.request_file.read_text(encoding='utf-8'))
+        tokens = request['prompt']
+        if not isinstance(tokens, list) or not tokens or not all(type(token) is int for token in tokens):
+            raise ValueError('saved request must contain a nonempty array of prompt token IDs')
+        args.size = len(tokens)
+        return dict(request, n_predict=args.n_predict, temperature=args.temperature,
+                    cache_prompt=False, return_tokens=True, stream=False)
+    if args.exact_saved_history:
+        rendered = post('/apply-template', {'messages': source['requests']['8192']['messages']})['prompt']
+        tokens = tokenize(rendered, True)
+        if len(tokens) != 8192:
+            raise RuntimeError(f'exact saved history rendered to {len(tokens)} tokens rather than 8192')
+        return {'prompt': tokens, 'n_predict': args.n_predict, 'temperature': args.temperature, 'seed': 42,
+                'top_p': 0.95, 'top_k': 20, 'min_p': 0.0, 'repeat_penalty': 1.0,
+                'cache_prompt': False, 'return_tokens': True, 'stream': False}
     if args.prompt_text is not None:
         rendered = post('/apply-template', {'messages': [{'role': 'user', 'content': args.prompt_text}]})['prompt']
         tokens = tokenize(rendered, True)
@@ -91,7 +128,7 @@ def make_request():
 
 request_path = OUT / (args.tag + '.request.json')
 summary_path = OUT / (args.tag + '.summary.json')
-if summary_path.exists() or request_path.exists():
+if summary_path.exists() or request_path.exists() or any(OUT.glob(args.tag + '-[0-9]*')):
     raise RuntimeError('refusing to overwrite an earlier run')
 rows = []
 payload = None
@@ -102,17 +139,34 @@ for trial, variant in enumerate(variants, 1):
     prefix = OUT / f'{args.tag}-{trial}-{variant}'
     env = {k: v for k, v in os.environ.items() if not k.startswith(('GGML_', 'LLAMA_'))}
     env['GGML_CUDA_FA_QR_LOG'] = '1'
-    if variant == 'stock':
+    if variant == 'stock' and not args.compare_speculation:
         env['GGML_CUDA_DISABLE_FA_QR'] = '1'
+    run_command = list(command)
+    run_command[0] = str(variant_bins[variant] / 'llama-server.exe')
+    if args.compare_speculation and variant == 'stock':
+        run_command[run_command.index('--spec-type') + 1] = 'none'
+        model_draft = run_command.index('--model-draft')
+        del run_command[model_draft:model_draft + 2]
+    if args.draft_order:
+        run_command[run_command.index('--spec-draft-n-max') + 1] = str(args.draft_order[trial - 1])
+    spec_type = run_command[run_command.index('--spec-type') + 1]
+    draft_width = 0 if spec_type == 'none' else int(run_command[run_command.index('--spec-draft-n-max') + 1])
     write(prefix.with_suffix('.command.json'), {
-        'argv': command, 'environment_overrides': {k: v for k, v in env.items() if k.startswith(('GGML_', 'LLAMA_'))},
-        'binary_sha256': binary_hashes, 'request_file': str(request_path),
-        'prompt_source': args.prompt_text if args.prompt_text is not None else 'saved 8192-token engineering history, repeated/trimmed before final Fibonacci request',
+        'argv': run_command, 'environment_overrides': {k: v for k, v in env.items() if k.startswith(('GGML_', 'LLAMA_'))},
+        'binary_sha256': variant_hashes[variant], 'request_file': str(request_path),
+        'comparison_mode': comparison_mode,
+        'spec_type': spec_type,
+        'draft_width': draft_width,
+        'exact_saved_history': args.exact_saved_history,
+        'prompt_source': (str(args.request_file) if args.request_file is not None else
+                          args.prompt_text if args.prompt_text is not None else
+                          'saved 8192-token engineering history'),
     })
-    print(json.dumps({'event': 'starting', 'trial': trial, 'variant': variant, 'size': args.size}), flush=True)
+    print(json.dumps({'event': 'starting', 'trial': trial, 'variant': variant, 'size': args.size,
+                      'draft_width': draft_width}), flush=True)
     log_path = prefix.with_suffix('.log')
     with log_path.open('w', encoding='utf-8') as log:
-        proc = subprocess.Popen(command, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT,
+        proc = subprocess.Popen(run_command, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT,
                                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         try:
             deadline = time.monotonic() + 240
@@ -141,13 +195,19 @@ for trial, variant in enumerate(variants, 1):
             timings = result['timings']
             text = result['content']
             row = {'trial': trial, 'variant': variant, 'context_tokens': args.size, 'wall_s': wall_s,
+                   'spec_type': spec_type,
+                   'draft_width': draft_width,
+                   'binary_sha256': variant_hashes[variant], 'server_bin': str(variant_bins[variant]),
                    'request_sha256': request_hash, 'timings': timings,
                    'tokens_evaluated': result.get('tokens_evaluated'), 'truncated': result.get('truncated'),
                    'stop_type': result.get('stop_type'), 'output_sha256': hashlib.sha256(text.encode()).hexdigest(),
                    'output_token_sha256': hashlib.sha256(json.dumps(result.get('tokens', [])).encode()).hexdigest(),
                    'output_characters': len(text), 'response_file': str(prefix.with_suffix('.response.json'))}
             rows.append(row)
-            write(summary_path, {'size': args.size, 'order': variants, 'rows': rows, 'binary_sha256': binary_hashes})
+            write(summary_path, {'size': args.size, 'order': variants, 'rows': rows,
+                                'binary_sha256': None if args.baseline_bin else binary_hashes,
+                                'binary_sha256_by_variant': variant_hashes,
+                                'comparison_mode': comparison_mode, 'draft_order': args.draft_order})
             print(json.dumps(row), flush=True)
             if timings.get('cache_n', 0) != 0 or timings['prompt_n'] != args.size:
                 raise RuntimeError('prompt cache or incorrect context length invalidates the comparison')

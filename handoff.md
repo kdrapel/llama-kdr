@@ -1,8 +1,50 @@
 # Intermediate handoff: 2026-11-16
 
+## DSpine warmup on final 8K (2026-11-20)
+
+- Two runs each on the same cold 16K prompt with 256 greedy output tokens. The isolated test server kept the same ROCm libraries and width-6 draft. Full, tail injection only, and tail capture plus injection averaged 80.84/79.32/51.94 s prefill and 88.59/87.21/59.05 s request wall time.
+- Tail capture plus injection saved 28.90 s prefill (35.8%). All six trials matched the 256 output token IDs, first draft proposals, and 199/334 acceptance. All counted 34 same-size graph reallocations. Capture-off also released the 200 MiB capture buffer during the prefix, so both graph work and allocation changed.
+- This test covers single-slot cold 16K text on this draft. Exact requests, patch, build commands, raw data, and CSV/JSON summaries are in `results/dspine-rocm/dflash-tail-16k-20261120/`. Production binaries and tracked server source were preserved.
+- Delayed capture and injection now live in `tools/server/server-context.cpp`, gated by `LLAMA_DFLASH_DELAY_PREFILL=1` for cold single-slot 16K text completions on DFlash2 with device feature capture and `cache_prompt: false`. Run `run-experiment.py --source-build --output-dir <new-directory>` for the A/B using the normal ROCm server build.
+
+## 16K prefill, DSpine on versus off (2026-11-20)
+
+- Current GSQ-RCO and current binaries, 16384 prompt tokens, one greedy output token, zero cache reuse, 131072 capacity, three fresh servers per condition. Off uses `--spec-type none` with no draft model loaded. All trials returned the same token.
+- On averaged 82.39 s and 198.91 tok/s. Off averaged 27.95 s and 586.24 tok/s, saving 54.44 s (66.1%) with 2.95x prefill throughput. Each on run logged 33 same-size graph reallocations, and off logged zero. Attribution to individual DSpine costs remains open.
+- Exact request, per-trial timings, logs, and commands are retained in `results/dspine-rocm/prefill-16k-spec-ab-20261120/`. The harness exposes `--compare-speculation` for replays.
+
+## Draft-width follow-up on three 8K prompts (2026-11-18)
+
+- All 12 runs are saved in `results/dspine-rocm/draft-width-8k-prompts-20261118/`. Current build, temperature 0.6, seed 42, 8192 prompt tokens, 256 output tokens, zero cache reuse, two trials per width per prompt with reversed order.
+- Width 2 versus 6 mean generation time was 8.92 versus 8.90 s on the code walkthrough, 6.28 versus 6.83 s on the build guide, and 6.35 versus 7.32 s on the service metrics task. Width 2 saved 8.0% and 13.3% on the latter two prompts. Code width 2 varied from 36.57 to 23.45 tok/s with the same output and a drafting-time increase from 0.95 to 4.82 s. Width 6 repeated at 28.83/28.46 tok/s there.
+
+## Draft-width sweep (2026-11-18)
+
+- All 24 trials and derived CSV/JSON measurements are saved in `results/dspine-rocm/draft-width-20261118/`. Current binary, width 2/4/6, 131072 capacity, two fresh servers per width per workload, no profiling or cache reuse.
+- Fixed 256-token generation rates by width 2/4/6 were 38.73/38.69/38.85 tok/s at 48 prompt tokens, 44.28/37.55/35.47 at 8K, and 30.98/29.68/34.94 at 64K. Width 2 at 64K ranged 24.16-37.79 tok/s with matching output and draft counts. Its logged drafting time fell from 4.37 s to 0.85 s. Width 6 had the highest average at 64K and repeated at 35.00/34.89 tok/s.
+- Complete singleton responses ended at EOS after 747/669/708 tokens, with mean request wall times 22.04/17.89/20.56 s for widths 2/4/6. Output sequences differed by width. The earlier and new 256-token width-6 singleton runs match on all five binary hashes, request and token hashes, but throughput changed from 28.52 to 38.85 tok/s.
+
 ## Measurement retention requirement
 
 User direction (2026-11-16): always keep every measured statistic. Save raw timing/acceptance, exact requests, commands/environment, responses and binary hashes under `docs/development/measurements/rdna4-q4/`, not only inside the disposable build tree. Keep prior samples; use distinct run tags instead of overwriting. Record failures and validity limits alongside successful runs. The 8K/64K A/B artifacts and isolated kernel timing data have been copied there. The 98304-token prompt, 256-output-token candidate/stock follow-up is complete. New harness `tools/dspine-fattn-ab.py` defaults to this archive and refuses existing request/summary tags.
+
+## Latest controlled check: before bc7c, 8K/256
+
+### Later user request: reconstructed build, empty singleton conversation
+
+User clarified that "1k generation" meant a fresh/empty conversation and a complete natural answer to `What is a singleton in C#?`, not an 8K prompt or a fixed 1024-token response. Ran only the reconstruction, unchanged, with 131072 capacity, temperature 0.6, seed 42, DFlash width 6 and no history/cache reuse. The template-rendered prompt is 48 tokens. A 4096-token safety cap allowed the answer to finish normally at EOS after 656 generated tokens.
+
+Measured generation: 23.299591 tok/s, 28.112081 s. Prefill: 1.847560 s; request wall time: 29.961353 s. Draft acceptance: 468/1122 (41.711%). This single sample does not reproduce the user's recalled 35-55 tok/s, and is not a matched comparison with another output/build.
+
+Every artifact is saved under `docs/development/measurements/rdna4-q4/reconstructed-pre-bc7-singleton-full-20261116*`, including exact request, response, timings, hashes, log, `.stats.json` and readable full `.generation.md`. Server cleaned up. No source, settings default or production dispatch changes were made for this request.
+
+- User explicitly requires matching 256 output tokens; do not compare old 96-token rates directly with new 256-token rates. All eight new samples use the exact saved 8192-token engineering history, temperature 0.6, seed 42, no cache reuse, profiling off, fresh servers. Same request hash across both series, `8e0ef77ae747b06ed66154ae4d61690340052032a6896ce52ff29a678f877400`.
+- Rebuilt clean parent `d78cbd3bc` in detached `.tmp/pre-bc7-20261116`, with all 147 compared GGML/llama build options matching current. Original fast-curve executables are absent, and that historical curve includes an uncommitted Q2_K route absent from the clean parent. Do not call the rebuild an exact recovery of the old fast binary.
+- Clean-parent/current alternating repeats: parent 27.114/32.623 tok/s, mean 29.869; current 30.578/29.106, mean 29.842 (-0.090%). Prefill means 145.870 versus 201.150 tok/s. Parent acceptance 205/296; current 193/369. Parent same-output timing spread is substantial.
+- Preserved pure baseline binaries in `.tmp/pre-bc7-pure-bin-20261116`. Then added only the documented eight-line Q2_K hipBLAS route in the isolated worktree and saved the patch; production source/binaries were not changed. This is a labeled reconstruction, not guaranteed historical source recovery.
+- Reconstruction/current/current/reconstruction repeats: reconstruction 31.769/30.580 tok/s, mean 31.174; current 29.878/29.639, mean 29.759. Current is 4.541% slower; prefill means 201.556 versus 203.094 tok/s (+0.763% current). Reconstruction accepts 201/322 (62.42%); current 193/369 (52.30%). Outputs differ across builds and draft call counts are 54 versus 62, so this is not an isolated kernel slowdown.
+- Raw inputs, outputs, hashes, settings, all timing/acceptance, build logs, patch and summaries are retained in the archive. Combined stats: `pre-bc7-8k-256-20261116.all-comparisons.json`. Report: `docs/development/dspine-rocm-pre-bc7-8k-256.md`. Both series passed 8192/256/zero-cache checks and server processes were cleaned up.
+- This supports a modest 8K slowdown against the closer reconstruction but does not reproduce the historical 45-47 tok/s rate with 256 outputs or prove bc7c alone caused a regression. Next isolate current WMMA enable/disable on this exact request, then other changes if needed, preserving acceptance and call counts. No production policy change or automatic commit was made for this task.
 
 ## Latest measurement: 96K, 256 output tokens
 
