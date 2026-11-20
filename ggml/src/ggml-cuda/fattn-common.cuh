@@ -5,6 +5,7 @@
 #include "vecdotq.cuh"
 
 #include <cstdint>
+#include <cinttypes>
 
 #define FATTN_KQ_STRIDE       256
 #define HALF_MAX_HALF         __float2half(65504.0f/2) // Use neg. of this instead of -INFINITY to initialize KQ max vals to avoid NaN upon subtraction.
@@ -1172,7 +1173,24 @@ void launch_fattn(
     // Optional optimization where the mask is scanned to determine whether part of the calculation can be skipped.
     // Only worth the overhead if there is at lease one FATTN_KQ_STRIDE x FATTN_KQ_STRIDE square to be skipped or
     //     multiple sequences of possibly different lengths, or kv_rows lists that end with padding.
-    const bool scan_mask = !use_sparse && mask && n_kv_cols % FATTN_KQ_STRIDE == 0 && (Q->ne[1] >= 1024 || Q->ne[3] > 1 || kv_rows);
+    int mask_scan_min_queries = 1024;
+#if defined(GGML_USE_HIP)
+    static const char * const scan_experiment = getenv("GGML_HIP_FA_MASK_SCAN_AB");
+    const bool trace_mask_scan = scan_experiment && GGML_CUDA_CC_IS_RDNA4(cc) &&
+            Q->ne[0] == 256 && Q->ne[1] >= 256 && Q->ne[1] < 1024 && Q->ne[3] == 1 &&
+            K->type == GGML_TYPE_Q4_0 && V->type == GGML_TYPE_Q4_0 && !kv_rows && !use_sparse;
+    if (trace_mask_scan && scan_experiment[0] == '1' && scan_experiment[1] == '\0') {
+        mask_scan_min_queries = 256;
+    }
+#endif
+    const bool scan_mask = !use_sparse && mask && n_kv_cols % FATTN_KQ_STRIDE == 0 &&
+            (Q->ne[1] >= mask_scan_min_queries || Q->ne[3] > 1 || kv_rows);
+#if defined(GGML_USE_HIP)
+    if (trace_mask_scan) {
+        GGML_LOG_INFO("fa_mask_scan queries=%" PRId64 " kv=%" PRId64 " tile=%dx%d scan=%d\n",
+                Q->ne[1], n_kv_cols, ncols1, ncols2, int(scan_mask));
+    }
+#endif
     if (scan_mask) {
         const int64_t s31 = mask->nb[1] / sizeof(half2);
         const int64_t s33 = mask->nb[3] / sizeof(half2);

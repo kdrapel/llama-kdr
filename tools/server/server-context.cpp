@@ -1097,12 +1097,17 @@ private:
     static constexpr int32_t dflash_prefill_window = 8192;
     bool dflash_delay_prefill = false;
     bool dflash_capture_paused = false;
+    const bool profile_prefill = [] {
+        const char * value = std::getenv("LLAMA_PROFILE_PREFILL");
+        return value && std::string_view(value) == "1";
+    }();
 
     bool set_dflash_capture_paused(bool paused) {
         if (dflash_capture_paused == paused) {
             return true;
         }
 
+        const int64_t start_us = profile_prefill ? ggml_time_us() : 0;
         llama_synchronize(ctx_tgt);
         llama_synchronize(ctx_dft);
         if (paused) {
@@ -1123,6 +1128,9 @@ private:
         }
 
         dflash_capture_paused = paused;
+        if (profile_prefill) {
+            SRV_INF("prefill_profile capture=%d toggle_us=%" PRId64 "\n", int(!paused), ggml_time_us() - start_us);
+        }
         SRV_INF("DFlash prefill capture=%d\n", int(!paused));
         return true;
     }
@@ -1562,11 +1570,13 @@ private:
         const char * delay_prefill = std::getenv("LLAMA_DFLASH_DELAY_PREFILL");
         const auto & spec_types = params_base.speculative.types;
         dflash_delay_prefill = delay_prefill && std::string_view(delay_prefill) == "1" &&
-                slots.size() == 1 && !mctx && spec && ctx_dft && model_dft && spec_types.size() == 1 &&
-                (spec_types.front() == COMMON_SPECULATIVE_TYPE_DRAFT_DFLASH ||
-                 spec_types.front() == COMMON_SPECULATIVE_TYPE_DRAFT_DFLASH2) &&
+                slots.size() == 1 && !mctx && spec && ctx_dft && model_dft &&
                 llama_model_dflash_variant(model_dft) == LLAMA_DFLASH_VARIANT_DFLASH2 &&
-                llama_model_n_swa(model_dft) == dflash_prefill_window && llama_supports_embd_row(ctx_dft);
+                llama_model_n_swa(model_dft) == dflash_prefill_window && llama_supports_embd_row(ctx_dft) &&
+                std::all_of(spec_types.begin(), spec_types.end(), [](common_speculative_type type) {
+                    return type == COMMON_SPECULATIVE_TYPE_NONE || type == COMMON_SPECULATIVE_TYPE_DRAFT_DFLASH ||
+                            type == COMMON_SPECULATIVE_TYPE_DRAFT_DFLASH2;
+                });
 
         for (int i = 0; i < params_base.n_parallel; i++) {
             server_slot & slot = slots[i];
@@ -2830,10 +2840,16 @@ private:
         //       this is not true for SWA models: https://github.com/ggml-org/llama.cpp/pull/24411#issuecomment-4677983225
         cur.update_pos(slot.prompt.n_tokens() - n_tokens_cur, pos_min, pos_max);
 
+        const int64_t checkpoint_start_us = profile_prefill ? ggml_time_us() : 0;
         cur.update_tgt(ctx_tgt, slot.id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
+        const int64_t checkpoint_target_us = profile_prefill ? ggml_time_us() - checkpoint_start_us : 0;
         cur.update_dft(ctx_dft, slot.id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
         // stash the draft's speculative state with the checkpoint
         common_speculative_get_state(spec.get(), slot.id, cur.data_spec);
+        if (profile_prefill) {
+            SLT_INF(slot, "prefill_checkpoint pos=%d bytes=%zu target_us=%" PRId64 " draft_state_us=%" PRId64 "\n",
+                    cur.pos_max, cur.size(), checkpoint_target_us, ggml_time_us() - checkpoint_start_us - checkpoint_target_us);
+        }
 
         slot.prompt.checkpoints.push_back(std::move(ckpt));
 
@@ -4413,7 +4429,7 @@ private:
                         slot.dflash_delayed_prefill = dflash_delay_prefill && n_past == 0 &&
                                 slot.task->type == SERVER_TASK_TYPE_COMPLETION && !slot.task->params.cache_prompt &&
                                 !slot.task->is_child() && !slot.task->is_parent() &&
-                                slot.task->n_tokens() == 2 * dflash_prefill_window;
+                                slot.task->n_tokens() > dflash_prefill_window;
 
                         metrics.add_prompt_cached(n_past);
 
@@ -4779,13 +4795,21 @@ private:
             has_output |= batch.tokens[i].output;
         }
 
+        const bool measure = profile_prefill && slots.size() == 1 && batch.tokens[off].is_prompt;
+        int64_t target_us = 0;
+        int64_t inject_us = 0;
+
         // yield to the queue, so we can still handle metrics tasks while decoding
         // note: the sync is done here too, so that the wait is also covered by the yield
         int ret = 0;
         queue_tasks.yield_to_queue([&]() {
+            const int64_t start_us = measure ? ggml_time_us() : 0;
             ret = llama_process(ctx_tgt, LLAMA_PROCESS_TYPE_DECODE, batch.view.get());
-            if (ret == 0 && has_output) {
+            if (ret == 0 && (has_output || measure)) {
                 llama_synchronize(ctx_tgt);
+            }
+            if (measure) {
+                target_us = ggml_time_us() - start_us;
             }
         });
 
@@ -4848,7 +4872,12 @@ private:
         if (spec && !skip_injection) {
             bool ok = true;
             queue_tasks.yield_to_queue([&]() {
+                const int64_t start_us = measure ? ggml_time_us() : 0;
                 ok = common_speculative_process(spec.get(), batch.view);
+                if (measure && ok && ctx_dft) {
+                    llama_synchronize(ctx_dft);
+                    inject_us = ggml_time_us() - start_us;
+                }
             });
 
             if (!ok) {
@@ -4857,6 +4886,11 @@ private:
                 // TODO: handle error
                 throw std::runtime_error("failed to process speculative batch");
             }
+        }
+
+        if (measure) {
+            SRV_INF("prefill_profile pos=%d count=%d target_us=%" PRId64 " inject_us=%" PRId64 "\n",
+                    batch.tokens[off].pos[0], batch.view.size(), target_us, inject_us);
         }
 
         // handle `n_cmpl > 1` tasks - when the main prompt is processed, activate all child tasks too

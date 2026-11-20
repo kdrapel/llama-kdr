@@ -80,13 +80,28 @@ llama_kv_cache::llama_kv_cache(
     const  layer_reuse_cb & reuse,
     const  layer_share_cb & share,
                const char * name_tag,
-                     bool   is_indexer) :
+                     bool   is_indexer,
+                 uint32_t   initial_size) :
     model(model), hparams(hparams), v_trans(v_trans),
     n_seq_max(n_seq_max), n_stream(unified ? 1 : n_seq_max), n_swa(n_swa), is_indexer(is_indexer),
     attn_rot_bufs(no_alloc), swa_type(swa_type), ctxs_bufs(no_alloc),
     other(static_cast<llama_kv_cache *>(mem_other)),
     v_cells_impl(other ? other->v_cells_impl : std::make_shared<llama_kv_cells_vec>()),
     v_cells(*v_cells_impl) {
+
+    if (initial_size > 0 && initial_size < kv_size) {
+        GGML_ASSERT(!no_alloc && !other && !v_trans && !reuse && !share &&
+                    n_stream == 1 && n_seq_max == 1 && swa_type == LLAMA_SWA_TYPE_NONE);
+        capacity_limit = kv_size;
+        capacity_step = initial_size;
+        make_larger_cache = [&model, &hparams, type_k, type_v, offload, unified, n_swa, filter](uint32_t size) {
+            return std::make_unique<llama_kv_cache>(
+                    model, false, hparams, type_k, type_v, false, offload, unified, size, 1, n_swa,
+                    LLAMA_SWA_TYPE_NONE, nullptr, filter, nullptr, nullptr);
+        };
+        kv_size = initial_size;
+        LLAMA_LOG_INFO("%s: growing target KV enabled (%u initial cells, %u limit)\n", __func__, kv_size, capacity_limit);
+    }
 
     // shared cells view the source cache's K/V tensors, so the cell count
     // follows the source allocation: a fitted target can be smaller than the
@@ -2306,6 +2321,72 @@ void llama_kv_cache::state_read(llama_io_read_i & io, llama_seq_id seq_id, llama
     state_read_sinfo(io, seq_id, flags, nullptr, nullptr);
 }
 
+void llama_kv_cache::set_before_resize(std::function<void()> callback) {
+    if (make_larger_cache) {
+        before_resize = std::move(callback);
+    }
+}
+
+bool llama_kv_cache::ensure_batch_capacity(uint32_t n_tokens) {
+    if (make_larger_cache && get_size() < capacity_limit) {
+        const uint32_t used = v_cells[0].get_used();
+        const uint32_t required = used + std::min(n_tokens, capacity_limit - used);
+        try {
+            ensure_capacity(required);
+        } catch (const std::exception & err) {
+            LLAMA_LOG_ERROR("%s: %s\n", __func__, err.what());
+            return false;
+        }
+    }
+    return true;
+}
+
+void llama_kv_cache::ensure_capacity(uint32_t required) {
+    const uint32_t old_size = get_size();
+    if (!make_larger_cache || required <= old_size || required > capacity_limit) {
+        return;
+    }
+
+    const uint64_t steps = (uint64_t(required) + capacity_step - 1) / capacity_step;
+    const uint32_t new_size = std::min<uint64_t>(capacity_limit, steps * capacity_step);
+    const int64_t start_us = ggml_time_us();
+    auto larger = make_larger_cache(new_size);
+    larger->v_cells[0] = v_cells[0];
+    larger->v_cells[0].grow(new_size);
+    larger->v_heads[0] = v_heads[0];
+
+    // Drain in-flight work and discard graphs that reference the old tensors.
+    GGML_ASSERT(before_resize);
+    before_resize();
+
+    const uint32_t copy_rows = v_cells[0].used_max_p1();
+    if (copy_rows > 0) {
+        GGML_ASSERT(layers.size() == larger->layers.size());
+        for (size_t i = 0; i < layers.size(); ++i) {
+            for (int value = 0; value < 2; ++value) {
+                const ggml_tensor * src = value ? layers[i].v : layers[i].k;
+                ggml_tensor dst = *(value ? larger->layers[i].v : larger->layers[i].k);
+                // Only the length of the single contiguous stream has changed.
+                GGML_ASSERT(src->ne[0] == dst.ne[0] && src->nb[1] == dst.nb[1]);
+                ggml_tensor src_rows = *src;
+                src_rows.ne[1] = dst.ne[1] = copy_rows;
+                src_rows.nb[2] = src_rows.nb[3] = dst.nb[2] = dst.nb[3] = copy_rows * src->nb[1];
+                ggml_backend_tensor_copy(&src_rows, &dst);
+            }
+        }
+    }
+
+    v_cells.swap(larger->v_cells);
+    v_heads.swap(larger->v_heads);
+    layers.swap(larger->layers);
+    ctxs_bufs.bufs.swap(larger->ctxs_bufs.bufs);
+    attn_rot_bufs.bufs.swap(larger->attn_rot_bufs.bufs);
+    larger.reset();
+
+    LLAMA_LOG_INFO("%s: target KV grew from %u to %u cells, copied %u rows in %.2f ms\n",
+            __func__, old_size, new_size, copy_rows, (ggml_time_us() - start_us)/1000.0);
+}
+
 void llama_kv_cache::state_read_sinfo(
         llama_io_read_i & io,
            llama_seq_id   seq_id,
@@ -2340,13 +2421,23 @@ const slot_info_vec_t *   sinfos_in) {
 
     // a whole-context restore replaces every stream, so the cache is emptied once here
     // clear() resets all streams at once, so doing it per stream below would keep only the last one
-    if (seq_id == -1) {
+    if (seq_id == -1 && !make_larger_cache) {
         clear(true);
     }
 
     for (uint32_t s = 0; s < n_stream; ++s) {
         uint32_t cell_count;
         io.read(&cell_count, sizeof(cell_count));
+
+        if (make_larger_cache) {
+            if (cell_count > capacity_limit) {
+                throw std::runtime_error("saved KV exceeds the configured context limit");
+            }
+            ensure_capacity(cell_count);
+            if (seq_id == -1) {
+                clear(true);
+            }
+        }
 
         if (cell_count == 0) {
             // a mirrored cache must be empty here as well, or the two no longer agree cell for cell

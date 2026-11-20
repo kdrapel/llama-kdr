@@ -345,6 +345,19 @@ services:
       LLAMA_ARG_PORT: 8080
 ```
 
+### On-demand target KV allocation
+
+For a single-slot Qwen3.5-family target with Flash Attention enabled, GPU KV
+offload, and `q4_0` keys and values, set `LLAMA_KV_CACHE_INITIAL_SIZE=16384`
+in the server environment to start with 16K target KV cells. The initial
+capacity is rounded up to a multiple of 256 and is at least the microbatch size.
+`--ctx-size` still sets the context limit.
+
+The cache adds capacity in increments of the initial size as batches or
+restored states need more cells. A resize briefly holds both allocations while
+the occupied rows are copied. The cache keeps its grown capacity until the
+context is destroyed.
+
 ### Multimodal support
 
 Multimodal support was added in [#12898](https://github.com/ggml-org/llama.cpp/pull/12898) and is currently an experimental feature.

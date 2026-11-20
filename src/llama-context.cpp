@@ -7,6 +7,7 @@
 #include "llama-batch.h"
 #include "llama-io.h"
 #include "llama-memory.h"
+#include "llama-memory-hybrid.h"
 #include "llama-mmap.h"
 #include "llama-model.h"
 #include "llama-moe-cache.h"
@@ -540,6 +541,17 @@ llama_context::llama_context(
         };
 
         memory.reset(model.create_memory(params_mem, cparams));
+        if (auto * hybrid = dynamic_cast<llama_memory_hybrid *>(memory.get())) {
+            hybrid->get_mem_attn()->set_before_resize([this] {
+                ggml_backend_sched_synchronize(sched.get());
+                ggml_backend_sched_reset(sched.get());
+                gf_res_prev_active = nullptr;
+                for (auto & res : gf_res_prev) {
+                    res->reset();
+                }
+                gf_res_reserve->reset();
+            });
+        }
     }
 
     // init backends
@@ -1819,6 +1831,14 @@ bool llama_context::set_adapter_cvec(
 }
 
 llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, llm_graph_type gtype, llama_memory_context_i * mctx, ggml_status & ret) {
+    static const bool profile_prefill = [] {
+        const char * value = std::getenv("LLAMA_PROFILE_PREFILL");
+        return value && value[0] == '1' && value[1] == '\0';
+    }();
+    const bool measure = profile_prefill && cparams.ctx_type == LLAMA_CONTEXT_TYPE_DEFAULT && ubatch.n_tokens >= 128;
+    const int64_t start_us = measure ? ggml_time_us() : 0;
+    int64_t build_us = 0;
+    int64_t alloc_us = 0;
     if (mctx && !mctx->apply()) {
         LLAMA_LOG_ERROR("%s: failed to apply memory context\n", __func__);
         ret = GGML_STATUS_FAILED;
@@ -1850,11 +1870,10 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
         ggml_backend_sched_reset(sched.get());
         ggml_backend_sched_set_eval_callback(sched.get(), cparams.cb_eval, cparams.cb_eval_user_data);
 
-        //const auto t_start_us = ggml_time_us();
-
+        const int64_t build_start_us = measure ? ggml_time_us() : 0;
         gf = model.build_graph(gparams);
-
-        //LLAMA_LOG_INFO("graph build time: %.3f ms\n", (ggml_time_us() - t_start_us)/1000.0);
+        const int64_t alloc_start_us = measure ? ggml_time_us() : 0;
+        build_us = alloc_start_us - build_start_us;
 
         if (!gf) {
             LLAMA_LOG_ERROR("%s: failed to initialize graph\n", __func__);
@@ -1869,6 +1888,7 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
         }
 
         gf_res_prev_active = res;
+        alloc_us = measure ? ggml_time_us() - alloc_start_us : 0;
     }
 
     // set the input data for the input tensors
@@ -1881,7 +1901,12 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
         //LLAMA_LOG_INFO("graph set inputs time: %.3f ms\n", (ggml_time_us() - t_start_us)/1000.0);
     }
 
+    const int64_t prepared_us = measure ? ggml_time_us() : 0;
     const auto status = graph_compute(res->get_gf(), ubatch.n_tokens > 1);
+    if (measure) {
+        LLAMA_LOG_INFO("prefill_graph count=%u prepare_us=%" PRId64 " build_us=%" PRId64 " alloc_us=%" PRId64 " compute_call_us=%" PRId64 "\n",
+                ubatch.n_tokens, prepared_us - start_us, build_us, alloc_us, ggml_time_us() - prepared_us);
+    }
     if (status != GGML_STATUS_SUCCESS) {
         LLAMA_LOG_ERROR("%s: failed to compute graph, compute status: %d\n", __func__, status);
         ret = status;

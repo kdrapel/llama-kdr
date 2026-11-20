@@ -93,6 +93,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -2522,11 +2523,20 @@ static void ggml_cuda_mul_mat(ggml_backend_cuda_context & ctx, const ggml_tensor
         ggml_cuda_mul_mat_q_few(ctx, src0, src1, dst);
         return;
     }
+    static const bool q2_k_blas_508 = ggml_cuda_env_int("GGML_HIP_Q2_K_BLAS_508", 1) != 0;
+    static const bool trace_q2_k = ggml_cuda_env_flag("GGML_HIP_PROFILE_PREFILL");
     // Q2_K MMQ spills registers for these dense projection tiles on gfx1200.
-    const bool q2_k_projection_blas = cc == GGML_CUDA_CC_RDNA4 && src0->type == GGML_TYPE_Q2_K && ne11 == 512 &&
+    const bool q2_k_projection = cc == GGML_CUDA_CC_RDNA4 && src0->type == GGML_TYPE_Q2_K &&
+            (ne11 == 512 || ne11 == 508) &&
             ne2 == 1 && ne3 == 1 && ggml_is_contiguous(src0) && ggml_is_contiguous(src1) &&
             ((ne00 == 5120 && (ne01 == 6144 || ne01 == 10240 || ne01 == 12288 || ne01 == 17408)) ||
              (ne00 == 17408 && ne01 == 5120));
+    const bool q2_k_projection_blas = q2_k_projection && (ne11 == 512 || q2_k_blas_508);
+    const bool use_mmq = !q2_k_projection_blas && ggml_cuda_should_use_mmq(src0->type, cc, ne11, /*n_experts =*/ 0);
+    if (trace_q2_k && q2_k_projection) {
+        GGML_LOG_INFO("prefill_q2_route n=%" PRId64 " k=%" PRId64 " m=%" PRId64 " route=%s name=%s\n",
+                ne11, ne00, ne01, use_mmq ? "mmq" : "blas", dst->name);
+    }
     if (q2_k_projection_blas) {
         static const bool profile_q2_k = ggml_cuda_env_flag("GGML_CUDA_PROFILE_Q2_K");
         cudaEvent_t start = nullptr;
@@ -2560,7 +2570,7 @@ static void ggml_cuda_mul_mat(ggml_backend_cuda_context & ctx, const ggml_tensor
         }
         return;
     }
-    if (ggml_cuda_should_use_mmq(src0->type, cc, ne11, /*n_experts =*/ 0)) {
+    if (use_mmq) {
         ggml_cuda_mul_mat_q(ctx, src0, src1, nullptr, dst);
         return;
     }
@@ -2864,6 +2874,92 @@ static bool ggml_cuda_graph_is_decode(const ggml_cgraph * cgraph) {
     }
     return false;
 }
+
+#if defined(GGML_USE_HIP)
+static const ggml_tensor * ggml_cuda_prefill_attention(const ggml_cgraph * graph) {
+    static const bool enabled = ggml_cuda_env_flag("GGML_HIP_PROFILE_PREFILL");
+    static const bool draft_enabled = ggml_cuda_env_flag("GGML_HIP_PROFILE_DFLASH_OPS");
+    if (enabled || draft_enabled) {
+        bool draft = false;
+        if (draft_enabled) {
+            for (int i = 0; i < graph->n_nodes; ++i) {
+                draft |= std::strcmp(graph->nodes[i]->name, "dspine_lattice") == 0;
+            }
+        }
+        for (int i = 0; i < graph->n_nodes; ++i) {
+            const auto * node = graph->nodes[i];
+            if (node->op == GGML_OP_FLASH_ATTN_EXT && (draft || (enabled && node->src[0]->ne[1] >= 128 &&
+                    node->src[1]->type == GGML_TYPE_Q4_0 && node->src[2]->type == GGML_TYPE_Q4_0))) {
+                return node;
+            }
+        }
+    }
+    return nullptr;
+}
+
+struct ggml_hip_prefill_trace {
+    struct sample {
+        const ggml_tensor * node = nullptr;
+        int fused = 0;
+        cudaEvent_t start = nullptr;
+        cudaEvent_t stop = nullptr;
+    };
+
+    const ggml_tensor * attention;
+    cudaStream_t stream;
+    std::vector<sample> samples;
+
+    ~ggml_hip_prefill_trace() { flush(); }
+
+    void flush() {
+        if (samples.empty()) {
+            return;
+        }
+        CUDA_CHECK(cudaEventSynchronize(samples.back().stop));
+        float span_ms = 0;
+        CUDA_CHECK(hipEventElapsedTime(&span_ms, samples.front().start, samples.back().stop));
+        static thread_local int graph_id = 0;
+        const int id = graph_id++;
+        GGML_LOG_INFO("prefill_gpu graph=%d queries=%" PRId64 " kv=%" PRId64 " span_ms=%.4f\n",
+                id, attention->src[0]->ne[1], attention->src[1]->ne[1], span_ms);
+        for (const auto & sample : samples) {
+            float ms = 0;
+            CUDA_CHECK(hipEventElapsedTime(&ms, sample.start, sample.stop));
+            const auto * node = sample.node;
+            const auto * dest = node->op == GGML_OP_SET_ROWS ? node->src[2] : nullptr;
+            const auto * base = dest && dest->view_src ? dest->view_src : dest;
+            const bool capture = base && std::strcmp(base->name, "layer_inp_dev") == 0;
+            GGML_LOG_INFO("prefill_gpu_op graph=%d op=%s name=%s type=%s fused=%d capture=%d gpu_ms=%.4f\n",
+                    id, ggml_op_name(node->op), node->name, node->src[0] ? ggml_type_name(node->src[0]->type) : "none",
+                    sample.fused, int(capture), ms);
+            CUDA_CHECK(cudaEventDestroy(sample.start));
+            CUDA_CHECK(cudaEventDestroy(sample.stop));
+        }
+    }
+
+    struct timer {
+        ggml_hip_prefill_trace & trace;
+        sample * entry = nullptr;
+
+        timer(ggml_hip_prefill_trace & trace, const ggml_tensor * node) : trace(trace) {
+            if (trace.attention) {
+                trace.samples.emplace_back();
+                entry = &trace.samples.back();
+                entry->node = node;
+                CUDA_CHECK(cudaEventCreateWithFlags(&entry->start, 0));
+                CUDA_CHECK(cudaEventCreateWithFlags(&entry->stop, 0));
+                CUDA_CHECK(cudaEventRecord(entry->start, trace.stream));
+            }
+        }
+
+        ~timer() {
+            if (entry) {
+                CUDA_CHECK(cudaEventRecord(entry->stop, trace.stream));
+            }
+        }
+    };
+};
+#endif
 
 static bool ggml_cuda_compute_forward(ggml_backend_cuda_context & ctx, struct ggml_tensor * dst) {
     switch (dst->op) {
@@ -3254,13 +3350,57 @@ static void ggml_backend_cuda_set_tensor_async(ggml_backend_t backend, ggml_tens
     CUDA_CHECK(cudaMemcpyAsync((char *) tensor->data + offset, data, size, cudaMemcpyHostToDevice, cuda_ctx->stream()));
 }
 
+#if defined(GGML_USE_HIP)
+struct ggml_hip_draft_events {
+    hipEvent_t graph_start = nullptr;
+    hipEvent_t graph_end = nullptr;
+    hipEvent_t copy_start = nullptr;
+    hipEvent_t copy_end = nullptr;
+    ggml_backend_t backend = nullptr;
+    cudaStream_t stream = nullptr;
+    int64_t submitted_us = 0;
+    int64_t copy_call_us = 0;
+    size_t copy_bytes = 0;
+    uint64_t round = 0;
+    bool copied = false;
+    bool graph_replay = false;
+
+    ~ggml_hip_draft_events() {
+        if (graph_start) {
+            hipEventDestroy(graph_start);
+            hipEventDestroy(graph_end);
+            hipEventDestroy(copy_start);
+            hipEventDestroy(copy_end);
+        }
+    }
+};
+
+static thread_local ggml_hip_draft_events ggml_hip_draft_trace;
+#endif
+
 static void ggml_backend_cuda_get_tensor_async(ggml_backend_t backend, const ggml_tensor * tensor, void * data, size_t offset, size_t size) {
     ggml_backend_cuda_context * cuda_ctx = (ggml_backend_cuda_context *) backend->context;
     ggml_backend_buffer_t buf = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
 
     GGML_ASSERT(buf->buft == ggml_backend_cuda_buffer_type(cuda_ctx->device) && "unsupported buffer type");
 
+#if defined(GGML_USE_HIP)
+    auto & trace = ggml_hip_draft_trace;
+    const bool measure = trace.backend == backend && trace.stream == cuda_ctx->stream() && std::strcmp(tensor->name, "dspine_lattice") == 0;
+    const int64_t start_us = measure ? ggml_time_us() : 0;
+    if (measure) {
+        CUDA_CHECK(hipEventRecord(trace.copy_start, trace.stream));
+    }
+#endif
     CUDA_CHECK(cudaMemcpyAsync(data, (const char *) tensor->data + offset, size, cudaMemcpyDeviceToHost, cuda_ctx->stream()));
+#if defined(GGML_USE_HIP)
+    if (measure) {
+        trace.copy_call_us = ggml_time_us() - start_us;
+        trace.copy_bytes = size;
+        CUDA_CHECK(hipEventRecord(trace.copy_end, trace.stream));
+        trace.copied = true;
+    }
+#endif
 }
 
 static void ggml_backend_cuda_set_tensor_2d_async(ggml_backend_t backend, struct ggml_tensor * tensor, const void * data,
@@ -3347,8 +3487,38 @@ static bool ggml_backend_cuda_cpy_tensor_async(ggml_backend_t backend_src, ggml_
 static void ggml_backend_cuda_synchronize(ggml_backend_t backend) {
     ggml_backend_cuda_context * cuda_ctx = (ggml_backend_cuda_context *)backend->context;
 
+#if defined(GGML_USE_HIP)
+    auto & trace = ggml_hip_draft_trace;
+    const bool measure = trace.backend == backend && trace.stream == cuda_ctx->stream() && trace.copied;
+    const int64_t sync_start_us = measure ? ggml_time_us() : 0;
+    bool ready_before_sync = false;
+    if (measure) {
+        const hipError_t status = hipEventQuery(trace.copy_end);
+        if (status != hipErrorNotReady) {
+            CUDA_CHECK(status);
+            ready_before_sync = true;
+        }
+    }
+#endif
     CUDA_CHECK(cudaStreamSynchronize(cuda_ctx->stream()));
 
+#if defined(GGML_USE_HIP)
+    if (measure) {
+        const int64_t sync_end_us = ggml_time_us();
+        float graph_ms = 0;
+        float copy_ms = 0;
+        float span_ms = 0;
+        CUDA_CHECK(hipEventElapsedTime(&graph_ms, trace.graph_start, trace.graph_end));
+        CUDA_CHECK(hipEventElapsedTime(&copy_ms, trace.copy_start, trace.copy_end));
+        CUDA_CHECK(hipEventElapsedTime(&span_ms, trace.graph_start, trace.copy_end));
+        GGML_LOG_INFO("dflash_gpu_wait round=%" PRIu64 " graph_ms=%.4f copy_ms=%.4f span_ms=%.4f copy_call_us=%" PRId64
+                " sync_us=%" PRId64 " round_us=%" PRId64 " bytes=%zu ready=%d replay=%d\n",
+                ++trace.round, graph_ms, copy_ms, span_ms, trace.copy_call_us, sync_end_us - sync_start_us,
+                sync_end_us - trace.submitted_us, trace.copy_bytes, int(ready_before_sync), int(trace.graph_replay));
+        trace.backend = nullptr;
+        trace.copied = false;
+    }
+#endif
     GGML_UNUSED(backend);
 }
 
@@ -5334,6 +5504,9 @@ static int ggml_cuda_try_fuse(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph 
 }
 
 static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph * cgraph, const bool use_cuda_graph, const bool cuda_graph_update_required, const void * graph_key) {
+#if defined(GGML_USE_HIP)
+    ggml_hip_prefill_trace prefill_trace { ggml_cuda_prefill_attention(cgraph), cuda_ctx->stream(), {} };
+#endif
     bool graph_evaluated_or_captured = false;
 
     // flag used to determine whether it is an integrated_gpu
@@ -5352,6 +5525,11 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
 #endif // USE_CUDA_GRAPH
 
     const auto try_launch_concurrent_event = [&](const ggml_tensor * node) {
+#if defined(GGML_USE_HIP)
+        if (prefill_trace.attention) {
+            return;
+        }
+#endif
         if (stream_ctx.concurrent_events.find(node) != stream_ctx.concurrent_events.end()) {
             concurrent_event = &stream_ctx.concurrent_events[node];
 
@@ -5490,6 +5668,9 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
                 }
 
                 const bool profile_ops = ggml_cuda_profile_ops_enabled();
+#if defined(GGML_USE_HIP)
+                ggml_hip_prefill_trace::timer prefill_timer(prefill_trace, node);
+#endif
                 int64_t profile_start = 0;
                 if (profile_ops) {
                     CUDA_CHECK(cudaDeviceSynchronize());
@@ -5505,6 +5686,11 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
                 }
 
                 int nodes_to_skip = ggml_cuda_try_fuse(cuda_ctx, cgraph, i);
+#if defined(GGML_USE_HIP)
+                if (prefill_timer.entry) {
+                    prefill_timer.entry->fused = nodes_to_skip;
+                }
+#endif
 
                 if (nodes_to_skip != 0) {
                     if (decode_fused) {
@@ -5682,6 +5868,40 @@ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend, 
         use_cuda_graph = false;
         cuda_graph_update_required = false;
     }
+#if defined(GGML_USE_HIP)
+    if (ggml_cuda_prefill_attention(cgraph)) {
+        use_cuda_graph = false;
+        cuda_graph_update_required = false;
+    }
+#endif
+
+#if defined(GGML_USE_HIP)
+    static const bool profile_draft_gpu = ggml_cuda_env_flag("GGML_HIP_PROFILE_DFLASH_GPU");
+    bool trace_draft = false;
+    if (profile_draft_gpu) {
+        for (int i = 0; i < cgraph->n_nodes; ++i) {
+            if (std::strcmp(cgraph->nodes[i]->name, "dspine_lattice") == 0) {
+                trace_draft = true;
+                break;
+            }
+        }
+    }
+    auto & draft_trace = ggml_hip_draft_trace;
+    if (trace_draft) {
+        if (!draft_trace.graph_start) {
+            CUDA_CHECK(hipEventCreate(&draft_trace.graph_start));
+            CUDA_CHECK(hipEventCreate(&draft_trace.graph_end));
+            CUDA_CHECK(hipEventCreate(&draft_trace.copy_start));
+            CUDA_CHECK(hipEventCreate(&draft_trace.copy_end));
+        }
+        draft_trace.backend = backend;
+        draft_trace.stream = cuda_ctx->stream();
+        draft_trace.submitted_us = ggml_time_us();
+        draft_trace.copied = false;
+        draft_trace.graph_replay = use_cuda_graph && !cuda_graph_update_required;
+        CUDA_CHECK(hipEventRecord(draft_trace.graph_start, draft_trace.stream));
+    }
+#endif
 
     if (use_cuda_graph && cuda_graph_update_required) {
         // Start CUDA graph capture
@@ -5694,6 +5914,12 @@ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend, 
     }
 
     ggml_cuda_graph_evaluate_and_capture(cuda_ctx, cgraph, use_cuda_graph, cuda_graph_update_required, graph_key);
+
+#if defined(GGML_USE_HIP)
+    if (trace_draft) {
+        CUDA_CHECK(hipEventRecord(draft_trace.graph_end, draft_trace.stream));
+    }
+#endif
 
     return GGML_STATUS_SUCCESS;
 }

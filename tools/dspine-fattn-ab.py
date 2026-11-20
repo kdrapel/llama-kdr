@@ -1,6 +1,7 @@
 """Run fresh-process, unprofiled GSQ attention A/B requests."""
 import argparse
 import copy
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -27,14 +28,30 @@ parser.add_argument('--exact-saved-history', action='store_true')
 parser.add_argument('--baseline-bin', type=Path)
 parser.add_argument('--order', default='candidate,stock,stock,candidate')
 parser.add_argument('--draft-order', type=int, nargs='+', choices=[2, 4, 6])
+parser.add_argument('--context-order', type=int, nargs='+', help='set reserved context capacity for each trial')
+parser.add_argument('--initial-kv-order', type=int, nargs='+',
+                    help='set initial target KV cells for each trial (0 uses static allocation)')
+parser.add_argument('--target-model', type=Path, help='override the target GGUF')
 parser.add_argument('--compare-speculation', action='store_true',
                     help='compare DSpine with speculation and draft-model loading disabled')
+parser.add_argument('--compare-mask-scan', action='store_true',
+                    help='compare the experimental HIP prefill mask scan on the same build')
+parser.add_argument('--compare-q2-508', action='store_true', help='compare HIP Q2_K projection dispatch at 508 columns')
 parser.add_argument('--tag', required=True)
 parser.add_argument('--quality', action='store_true')
+parser.add_argument('--profile-prefill', action='store_true', help='collect synchronized server and HIP event prefill timings')
+parser.add_argument('--profile-dflash-draft', action='store_true', help='time DFlash2 draft stages without extra device waits')
+parser.add_argument('--profile-dflash-gpu', action='store_true', help='record HIP events around the draft graph and lattice readback')
+parser.add_argument('--profile-dflash-ops', action='store_true', help='record GPU event timings for DFlash2 draft operators')
+parser.add_argument('--disable-hip-graphs', action='store_true', help='run with HIP graph capture and replay disabled')
 parser.add_argument('--output-dir', type=Path, default=OUT)
 args = parser.parse_args()
 if args.compare_speculation and (args.baseline_bin or args.draft_order):
     parser.error('--compare-speculation requires the same binary and a fixed draft width')
+if args.compare_mask_scan and (args.compare_speculation or args.baseline_bin or args.draft_order):
+    parser.error('--compare-mask-scan requires the same binary and speculation settings')
+if args.compare_q2_508 and (args.compare_mask_scan or args.compare_speculation or args.baseline_bin or args.draft_order or not args.profile_prefill):
+    parser.error('--compare-q2-508 requires --profile-prefill and matching binary and speculation settings')
 OUT = args.output_dir.resolve()
 OUT.mkdir(parents=True, exist_ok=True)
 variants = args.order.split(',')
@@ -42,7 +59,15 @@ if args.draft_order:
     if args.baseline_bin:
         parser.error('--draft-order uses the current binary for every trial')
     variants = ['candidate'] * len(args.draft_order)
+if args.context_order and (len(args.context_order) != len(variants) or min(args.context_order) <= args.n_predict):
+    parser.error('--context-order needs one capacity per trial with room for generation')
+if args.initial_kv_order and (len(args.initial_kv_order) != len(variants) or min(args.initial_kv_order) < 0 or
+                              any(variant != 'candidate' for variant in variants)):
+    parser.error('--initial-kv-order needs one nonnegative size per trial and the same candidate build and attention path')
 comparison_mode = ('speculation' if args.compare_speculation else
+                   'hip_mask_scan' if args.compare_mask_scan else
+                   'hip_q2_508' if args.compare_q2_508 else
+                   'initial_target_kv' if args.initial_kv_order else
                    'draft_width' if args.draft_order else
                    'different_builds' if args.baseline_bin else 'same_binary_dispatch')
 assert all(v in ('candidate', 'stock') for v in variants)
@@ -52,7 +77,8 @@ assert not args.exact_saved_history or args.size == 8192
 source = json.loads((ROOT / 'docs/development/dspine-rocm-prefill-results.json').read_text())
 command = [v.replace('\\\\', '\\') for v in source['cases']['baseline']['command']['argv']]
 command[0] = str(ROOT / 'build-rocm/bin/llama-server.exe')
-command[command.index('-m') + 1] = 'D:/40-49 Assets/44 AI Models/Qwen3.8-27B-GSQ-RCO-IQ3_XXS.gguf'
+command[command.index('-m') + 1] = str(args.target_model.resolve()) if args.target_model else (
+    'D:/40-49 Assets/44 AI Models/Qwen3.8-27B-GSQ-RCO-IQ3_XXS.gguf')
 command[command.index('--alias') + 1] = 'GSQ-RCO-FA-AB'
 command[command.index('--temp') + 1] = str(args.temperature)
 current_bin = ROOT / 'build-rocm/bin'
@@ -139,7 +165,25 @@ for trial, variant in enumerate(variants, 1):
     prefix = OUT / f'{args.tag}-{trial}-{variant}'
     env = {k: v for k, v in os.environ.items() if not k.startswith(('GGML_', 'LLAMA_'))}
     env['GGML_CUDA_FA_QR_LOG'] = '1'
-    if variant == 'stock' and not args.compare_speculation:
+    initial_kv = args.initial_kv_order[trial - 1] if args.initial_kv_order else 0
+    if initial_kv:
+        env['LLAMA_KV_CACHE_INITIAL_SIZE'] = str(initial_kv)
+    if args.profile_prefill:
+        env['LLAMA_PROFILE_PREFILL'] = '1'
+        env['GGML_HIP_PROFILE_PREFILL'] = '1'
+    if args.profile_dflash_draft:
+        env['LLAMA_PROFILE_DFLASH_DRAFT'] = '1'
+    if args.profile_dflash_gpu:
+        env['GGML_HIP_PROFILE_DFLASH_GPU'] = '1'
+    if args.profile_dflash_ops:
+        env['GGML_HIP_PROFILE_DFLASH_OPS'] = '1'
+    if args.disable_hip_graphs:
+        env['GGML_CUDA_DISABLE_GRAPHS'] = '1'
+    if args.compare_q2_508:
+        env['GGML_HIP_Q2_K_BLAS_508'] = str(int(variant == 'candidate'))
+    elif args.compare_mask_scan:
+        env['GGML_HIP_FA_MASK_SCAN_AB'] = str(int(variant == 'candidate'))
+    elif variant == 'stock' and not args.compare_speculation:
         env['GGML_CUDA_DISABLE_FA_QR'] = '1'
     run_command = list(command)
     run_command[0] = str(variant_bins[variant] / 'llama-server.exe')
@@ -149,6 +193,8 @@ for trial, variant in enumerate(variants, 1):
         del run_command[model_draft:model_draft + 2]
     if args.draft_order:
         run_command[run_command.index('--spec-draft-n-max') + 1] = str(args.draft_order[trial - 1])
+    if args.context_order:
+        run_command[run_command.index('--ctx-size') + 1] = str(args.context_order[trial - 1])
     spec_type = run_command[run_command.index('--spec-type') + 1]
     draft_width = 0 if spec_type == 'none' else int(run_command[run_command.index('--spec-draft-n-max') + 1])
     write(prefix.with_suffix('.command.json'), {
@@ -185,7 +231,8 @@ for trial, variant in enumerate(variants, 1):
                 payload = make_request()
                 write(request_path, payload)
             request_hash = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
-            write(prefix.with_suffix('.status.json'), {'event': 'generating', 'pid': proc.pid, 'request_sha256': request_hash})
+            write(prefix.with_suffix('.status.json'), {'event': 'generating', 'pid': proc.pid, 'request_sha256': request_hash,
+                                                       'request_start_utc': datetime.now(timezone.utc).isoformat()})
             print(json.dumps({'event': 'generating', 'trial': trial, 'variant': variant,
                               'pid': proc.pid, 'request_sha256': request_hash}), flush=True)
             started = time.perf_counter()
@@ -196,7 +243,7 @@ for trial, variant in enumerate(variants, 1):
             text = result['content']
             row = {'trial': trial, 'variant': variant, 'context_tokens': args.size, 'wall_s': wall_s,
                    'spec_type': spec_type,
-                   'draft_width': draft_width,
+                   'draft_width': draft_width, 'initial_target_kv_cells': initial_kv,
                    'binary_sha256': variant_hashes[variant], 'server_bin': str(variant_bins[variant]),
                    'request_sha256': request_hash, 'timings': timings,
                    'tokens_evaluated': result.get('tokens_evaluated'), 'truncated': result.get('truncated'),
@@ -215,6 +262,18 @@ for trial, variant in enumerate(variants, 1):
                 raise RuntimeError('response did not reach the requested comparison length or an allowed EOS')
             if not text or '\ufffd' in text:
                 raise RuntimeError('empty or invalid decoded text')
+            if initial_kv and 'growing target KV enabled' not in log_path.read_text(encoding='utf-8', errors='replace'):
+                raise RuntimeError('initial target KV setting did not enable cache growth')
+            if args.compare_mask_scan:
+                route = log_path.read_text(encoding='utf-8', errors='replace')
+                expected = f'scan={int(variant == "candidate")}'
+                if not any(expected in line for line in route.splitlines() if 'fa_mask_scan queries=512 ' in line):
+                    raise RuntimeError(f'512-row mask scan did not reach the expected setting ({expected})')
+            if args.compare_q2_508:
+                route = log_path.read_text(encoding='utf-8', errors='replace').split('new prompt,', 1)[1]
+                expected = 'route=blas' if variant == 'candidate' else 'route=mmq'
+                if not any(expected in line for line in route.splitlines() if 'prefill_q2_route n=508 ' in line):
+                    raise RuntimeError(f'508-column Q2_K projections did not reach the expected setting ({expected})')
             if args.quality:
                 quality = dict(payload)
                 quality['prompt'] = payload['prompt'] + tokenize('\n</think>\n\n', False)

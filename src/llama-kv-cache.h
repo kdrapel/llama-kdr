@@ -116,7 +116,8 @@ public:
         // a model can hold more than one cache, so the tensor names have to stay unique
                  const char *   name_tag = "",
         // lightning indexer keys are rotated with the indexer RoPE parameters
-                       bool   is_indexer = false);
+                       bool   is_indexer = false,
+                   uint32_t   initial_size = 0);
 
     ~llama_kv_cache() = default;
 
@@ -158,6 +159,9 @@ public:
     //
 
     uint32_t get_size()     const;
+
+    void set_before_resize(std::function<void()> before_resize);
+    bool ensure_batch_capacity(uint32_t n_tokens);
     uint32_t get_n_seq_max() const;
     uint32_t get_n_stream() const;
 
@@ -340,6 +344,13 @@ private:
 
     // model layer id -> KV cache layer id
     std::unordered_map<int32_t, int32_t> map_layer_ids;
+
+    uint32_t capacity_limit = 0;
+    uint32_t capacity_step = 0;
+    std::function<std::unique_ptr<llama_kv_cache>(uint32_t)> make_larger_cache;
+    std::function<void()> before_resize;
+
+    void ensure_capacity(uint32_t required);
 
     size_t total_size() const;
 

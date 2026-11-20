@@ -1498,6 +1498,7 @@ struct common_speculative_impl_draft_dspark final : public common_speculative_im
 // DFlash2: walks the lattice of the selector over the top-k candidates of the block
 struct common_speculative_impl_draft_dflash2 final : public common_speculative_impl_draft_dflash {
     int32_t selector_top_k = 0;
+    uint64_t draft_profile_round = 0;
 
     // probabilistic drafting: one generator per sequence and the seed it was last seeded with (-1: reseed)
     std::vector<std::mt19937> dflash2_rng;
@@ -1530,6 +1531,12 @@ struct common_speculative_impl_draft_dflash2 final : public common_speculative_i
 
     void draft(common_speculative_draft_params_vec & dparams) override {
         auto & ctx_dft = params.ctx_dft;
+        static const bool profile = [] {
+            const char * value = std::getenv("LLAMA_PROFILE_DFLASH_DRAFT");
+            return value && value[0] == '1' && value[1] == '\0';
+        }();
+        const bool measure = profile && n_seq == 1;
+        const int64_t start_us = measure ? ggml_time_us() : 0;
 
         batch.clear();
 
@@ -1561,8 +1568,10 @@ struct common_speculative_impl_draft_dflash2 final : public common_speculative_i
             return;
         }
 
+        const int64_t process_start_us = measure ? ggml_time_us() : 0;
         // decode all sequence's noise block in a single batch
         int ret = llama_process(ctx_dft, LLAMA_PROCESS_TYPE_DECODE, batch.get());
+        const int64_t process_end_us = measure ? ggml_time_us() : 0;
         if (ret != 0) {
             LOG_WRN("%s: llama_process returned %d\n", __func__, ret);
             return;
@@ -1580,6 +1589,7 @@ struct common_speculative_impl_draft_dflash2 final : public common_speculative_i
             auto & result = *dp.result;
 
             const float * lattice = llama_get_embeddings_nextn(ctx_dft);
+            const int64_t lattice_end_us = measure ? ggml_time_us() : 0;
             GGML_ASSERT(lattice && "DFlash2 selector produced no lattice");
 
             // DFlash2 can instead sample each step and hand q to the verifier for rejection sampling
@@ -1652,6 +1662,12 @@ struct common_speculative_impl_draft_dflash2 final : public common_speculative_i
                 if (sample) {
                     dp.result_q->clear();
                 }
+            }
+            if (measure) {
+                LOG_INF("dflash_draft_profile round=%" PRIu64 " pos=%d prep_us=%" PRId64 " process_us=%" PRId64
+                        " lattice_us=%" PRId64 " select_us=%" PRId64 "\n", ++draft_profile_round, dp.pos0,
+                        process_start_us - start_us, process_end_us - process_start_us,
+                        lattice_end_us - process_end_us, ggml_time_us() - lattice_end_us);
             }
         }
     }

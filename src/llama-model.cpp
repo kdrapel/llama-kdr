@@ -3396,6 +3396,19 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                             /* filter_recr       */ std::move(filter_recr),
                             /* filter_idx        */ std::move(filter_idx));
                     } else {
+                        uint32_t initial_kv_size = 0;
+                        const char * initial_kv = getenv("LLAMA_KV_CACHE_INITIAL_SIZE");
+                        if (initial_kv && !params.no_alloc && !params.mem_other &&
+                                params.ctx_type == LLAMA_CONTEXT_TYPE_DEFAULT &&
+                                arch == LLM_ARCH_QWEN35 && cparams.n_seq_max == 1 &&
+                                cparams.causal_attn && cparams.flash_attn && cparams.offload_kqv &&
+                                params.type_k == GGML_TYPE_Q4_0 && params.type_v == GGML_TYPE_Q4_0) {
+                            char * end = nullptr;
+                            const long long size = strtoll(initial_kv, &end, 10);
+                            if (size > 0 && size < cparams.n_ctx_seq && *end == '\0') {
+                                initial_kv_size = GGML_PAD(std::max<uint32_t>(size, cparams.n_ubatch), 256);
+                            }
+                        }
                         res = new llama_memory_hybrid(
                             /* model             */ *this,
                             /* no_alloc          */ params.no_alloc,
@@ -3413,7 +3426,8 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                             /* offload           */ cparams.offload_kqv,
                             /* unified           */ cparams.kv_unified,
                             /* filter_attn       */ std::move(filter_attn),
-                            /* filter_recr       */ std::move(filter_recr));
+                            /* filter_recr       */ std::move(filter_recr),
+                            /* initial_kv_size   */ initial_kv_size);
                     }
                 } else {
                     llama_kv_cache::layer_filter_cb filter = nullptr;

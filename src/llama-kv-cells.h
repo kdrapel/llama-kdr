@@ -120,6 +120,20 @@ public:
         reset();
     }
 
+    void grow(uint32_t n) {
+        assert(n > size());
+        pos.resize(n, -1);
+        ext.resize(n);
+        shift.resize(n);
+        seq.resize(n);
+
+        for (auto & bits : seq_bits) {
+            if (!bits.empty()) {
+                bits.resize((n + 63u)/64u);
+            }
+        }
+    }
+
     bool is_empty(uint32_t i) const {
         assert(i < pos.size());
         assert((pos[i] < 0 && pos[i] == -1) || pos[i] >= 0);
