@@ -22,6 +22,9 @@ LLAMA_API std::vector<llm_arch> llama_arch_all();
 // the canonical name of an architecture (e.g. "llama"), or "unknown"
 LLAMA_API const char * llama_arch_name(llm_arch arch);
 
+// Configure a single-slot text batch. Returns true if target KV rows were pruned.
+LLAMA_API bool llama_triattention_prepare(llama_context * ctx, uint32_t budget, bool generation);
+
 // the architecture with the given canonical name, or LLM_ARCH_UNKNOWN
 LLAMA_API llm_arch llama_arch_from_string(const std::string & name);
 

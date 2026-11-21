@@ -358,6 +358,63 @@ restored states need more cells. A resize briefly holds both allocations while
 the occupied rows are copied. The cache keeps its grown capacity until the
 context is destroyed.
 
+### Experimental TriAttention-style target eviction
+
+Set `LLAMA_TRIATTENTION_BUDGET=28672` to retain up to 28K target KV rows
+after pruning. This requires an on-demand target cache, for example
+`LLAMA_KV_CACHE_INITIAL_SIZE=16384`, and a single-slot Qwen3.5-family model
+with `q4_0` K/V and Flash Attention. The server applies eviction to fresh
+text completion requests with `cache_prompt: false`.
+
+The selector estimates future attention from a pre-RoPE query sample and
+key norms at one layer, ranks 64-row tiles, and keeps the first 128 and
+most recent 1,024 token positions. It uses the same retained rows across
+layers and preserves their original positions and quantized bytes.
+Prefill uses the full cache. On decode, it prunes near the budget plus
+2,048 rows and clears the pruned session when the request ends.
+
+Compaction may briefly hold both KV allocations. The server logs the
+retained row count, physical capacity, and compaction time.
+
+This selector is inspired by [Mao et al., "TriAttention: Efficient Long
+Reasoning with Trigonometric KV Compression"](https://proceedings.mlr.press/v306/mao26e.html),
+published at ICML 2026 (PMLR 306, pages 86458-86477). The paper uses pre-RoPE
+Q/K concentration and a trigonometric distance score to estimate key
+importance. This implementation is a lightweight heuristic that ranks 64-row
+tiles using sampled pre-RoPE queries and key norms, then copies selected KV
+rows without changing their quantized values. It does not implement the paper's
+trigonometric scoring or its KV compression method.
+
+#### Initial RX 9060 XT measurement
+
+The first same-binary A/B used the Qwen3.8-27B GSQ-RCO IQ3_XXS+MTP target,
+DSpine draft width 6, q4_0 target K/V, a 16,384-cell initial cache, and 256
+generated tokens. Each run used a fresh server and the full saved prompt with
+`cache_prompt: false`. Eviction used a 4,096-row budget so it would also run
+for the 8K prompt.
+
+| Prompt | Mode | Prefill (tokens/s) | Generation (tokens/s) | Wall time | Final target KV |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 8,192 | Baseline | 221.6 | 15.5 | 53.40 s | 288 MiB / 16,384 cells |
+| 8,192 | 4K eviction | 248.3 | 46.2 | 38.53 s | 112.5 MiB / 6,400 cells |
+| 65,536 | Baseline | 186.2 | 14.9 | 369.08 s | 1,440 MiB / 81,920 cells |
+| 65,536 | 4K eviction | 183.8 | 19.6 | 369.66 s | 112.5 MiB / 6,400 cells |
+
+At 64K, eviction retained 4,096 of 65,536 prompt rows and compacted the cache
+from 65,536 to 6,400 cells in 366 ms. The baseline cache grew to 81,920 cells
+while decoding. Generation was 32% faster in this single pair, saving 4.16 s
+over 256 tokens. The candidate prefill took 4.74 s longer, so total wall time
+was effectively unchanged.
+
+The 8K pair is inconclusive: the baseline's 15.5 tokens/s is much lower than
+an earlier saved 8K result around 44.7 tokens/s. The 46.2 tokens/s eviction
+sample does not establish a stable speedup. Both pairs completed 256 tokens,
+but their output hashes differ; this benchmark did not evaluate answer quality.
+These are single samples, and the 64K generation gain needs repeated runs.
+
+The full commands, logs, responses, binary hashes, CSV, JSON, and comparison
+are in [`results/dspine-rocm/triattention-8k-64k-20261121/`](../../results/dspine-rocm/triattention-8k-64k-20261121/comparison.md).
+
 ### Multimodal support
 
 Multimodal support was added in [#12898](https://github.com/ggml-org/llama.cpp/pull/12898) and is currently an experimental feature.

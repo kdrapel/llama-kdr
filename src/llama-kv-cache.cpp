@@ -2376,15 +2376,236 @@ void llama_kv_cache::ensure_capacity(uint32_t required) {
         }
     }
 
-    v_cells.swap(larger->v_cells);
-    v_heads.swap(larger->v_heads);
-    layers.swap(larger->layers);
-    ctxs_bufs.bufs.swap(larger->ctxs_bufs.bufs);
-    attn_rot_bufs.bufs.swap(larger->attn_rot_bufs.bufs);
+    replace_storage(*larger);
     larger.reset();
 
     LLAMA_LOG_INFO("%s: target KV grew from %u to %u cells, copied %u rows in %.2f ms\n",
             __func__, old_size, new_size, copy_rows, (ggml_time_us() - start_us)/1000.0);
+}
+
+void llama_kv_cache::replace_storage(llama_kv_cache & replacement) {
+    v_cells.swap(replacement.v_cells);
+    v_heads.swap(replacement.v_heads);
+    layers.swap(replacement.layers);
+    ctxs_bufs.bufs.swap(replacement.ctxs_bufs.bufs);
+    attn_rot_bufs.bufs.swap(replacement.attn_rot_bufs.bufs);
+}
+
+static constexpr uint32_t triattention_interval = 2048;
+
+bool llama_kv_cache::triattention_needs_prune(uint32_t budget, bool after_prefill) const {
+    if (!make_larger_cache || budget < 4096 || budget >= capacity_limit) {
+        return false;
+    }
+    const uint32_t used = v_cells[0].get_used();
+    return used > budget && (after_prefill || used - budget >= triattention_interval || get_size() - used < 8);
+}
+
+bool llama_kv_cache::triattention_prune(uint32_t budget, const llama_cparams & cparams, int il,
+        const ggml_tensor * query, bool previous_generation) {
+    const auto * key = get_k_storage(il);
+    const auto rope = model.get_rope_params(cparams, il);
+    if (!key || key->type != GGML_TYPE_Q4_0 || query->type != GGML_TYPE_F32 ||
+            !ggml_is_contiguous(query) || rope.type != LLAMA_ROPE_TYPE_IMROPE ||
+            rope.n_offs != 0 || rope.n_rot <= 0 || rope.n_rot > query->ne[0] ||
+            rope.ext_factor != 0.0f || rope.factors || !sc_info.empty()) {
+        return false;
+    }
+
+    const auto & cells = v_cells[0];
+    if (cells.get_has_shift()) {
+        return false;
+    }
+    const int dim = query->ne[0];
+    const int heads = query->ne[1];
+    const int kv_heads = hparams.n_head_kv(il);
+    if (dim != 256 || (n_rot_k && n_rot_k != uint32_t(dim)) || kv_heads <= 0 ||
+            heads < kv_heads || heads % kv_heads || key->ne[0] != dim * kv_heads ||
+            query->ne[2] < 1 || query->ne[2] > 32) {
+        return false;
+    }
+
+    const int64_t started = ggml_time_us();
+    const llama_pos latest = cells.seq_pos_max(0);
+    constexpr uint32_t prefix = 128;
+    constexpr uint32_t tail = 1024;
+    constexpr uint32_t tile = 64;
+    const int samples = previous_generation ? 1 : int(std::min<int64_t>(8, query->ne[2]));
+    const int gqa = heads / kv_heads;
+    std::vector<float> q(size_t(samples) * heads * dim);
+    ggml_backend_tensor_get(query, q.data(), 0, q.size() * sizeof(float));
+
+    // Average the query center's RoPE projection over representative future positions.
+    constexpr int offsets[] = { 1, 16, 64, 256, 1024 };
+    std::vector<float> refs(size_t(kv_heads) * dim);
+    std::vector<float> dispersion(kv_heads);
+    const int pairs = rope.n_rot / 2;
+    const auto & sections = hparams.rope_sections;
+    const int section_count = sections[0] + sections[1] + sections[2] + sections[3];
+    if (section_count <= 0) {
+        return false;
+    }
+    for (int h = 0; h < kv_heads; ++h) {
+        float * ref = refs.data() + h * dim;
+        float energy = 0.0f;
+        for (int t = 0; t < samples; ++t) {
+            for (int g = 0; g < gqa; ++g) {
+                const float * row = q.data() + (t * heads + h * gqa + g) * dim;
+                for (int d = 0; d < dim; ++d) {
+                    ref[d] += row[d] / (samples * gqa);
+                    energy += row[d] * row[d] / (samples * gqa);
+                }
+            }
+        }
+        float center_energy = 0.0f;
+        for (int d = 0; d < dim; ++d) {
+            center_energy += ref[d] * ref[d];
+        }
+        dispersion[h] = std::sqrt(std::max(0.0f, energy - center_energy) / dim);
+        for (int f = 0; f < pairs; ++f) {
+            float c = 0.0f, s = 0.0f;
+            const double freq = rope.freq_scale * std::pow(rope.freq_base, -double(f) / pairs);
+            const int sector = f % section_count;
+            const bool text_position = sector < 3 * sections[sector % 3];
+            for (int offset : offsets) {
+                const double phase = text_position ? (double(latest) + offset) * freq : 0.0;
+                c += std::cos(phase) / std::size(offsets);
+                s += std::sin(phase) / std::size(offsets);
+            }
+            const float x = ref[f], y = ref[f + pairs];
+            ref[f] = (c * x - s * y) * rope.attn_factor;
+            ref[f + pairs] = (s * x + c * y) * rope.attn_factor;
+        }
+        if (n_rot_k) {
+            for (int stride = 1; stride < dim; stride *= 2) {
+                for (int i = 0; i < dim; i += 2 * stride) {
+                    for (int j = i; j < i + stride; ++j) {
+                        const float a = ref[j], b = ref[j + stride];
+                        ref[j] = a + b;
+                        ref[j + stride] = a - b;
+                    }
+                }
+            }
+            for (int d = 0; d < dim; ++d) {
+                ref[d] /= std::sqrt(float(dim));
+            }
+        }
+    }
+
+    struct candidate {
+        std::vector<uint32_t> rows;
+        float priority;
+    };
+    std::vector<candidate> candidates;
+    std::vector<uint32_t> keep;
+    const uint32_t extent = cells.used_max_p1();
+    std::vector<uint8_t> keys(extent * key->nb[1]);
+    ggml_backend_tensor_get(key, keys.data(), 0, keys.size());
+    const auto dequantize = ggml_get_type_traits(key->type)->to_float;
+    std::vector<float> decoded(dim * kv_heads);
+    for (uint32_t base = 0; base < extent; base += tile) {
+        candidate entry{{}, -std::numeric_limits<float>::infinity()};
+        bool protect = false;
+        for (uint32_t i = base; i < std::min(base + tile, extent); ++i) {
+            if (cells.is_empty(i)) {
+                continue;
+            }
+            if (!cells.seq_has(i, 0) || cells.seq_count(i) != 1) {
+                return false;
+            }
+            const llama_pos pos = cells.pos_get(i);
+            protect |= pos < llama_pos(prefix) || pos > latest - llama_pos(tail);
+            entry.rows.push_back(i);
+        }
+        if (entry.rows.empty()) {
+            continue;
+        }
+        if (protect) {
+            keep.insert(keep.end(), entry.rows.begin(), entry.rows.end());
+            continue;
+        }
+        for (size_t i = 0; i < entry.rows.size(); i += std::max<size_t>(1, entry.rows.size() / 4)) {
+            dequantize(keys.data() + entry.rows[i] * key->nb[1], decoded.data(), key->ne[0]);
+            for (int h = 0; h < kv_heads; ++h) {
+                float dot = 0.0f, norm = 0.0f;
+                for (int d = 0; d < dim; ++d) {
+                    const float k = decoded[h * dim + d];
+                    dot += k * refs[h * dim + d];
+                    norm += k * k;
+                }
+                entry.priority = std::max(entry.priority, dot + dispersion[h] * std::sqrt(norm));
+            }
+        }
+        candidates.push_back(std::move(entry));
+    }
+    if (keep.size() >= budget) {
+        return false;
+    }
+    std::stable_sort(candidates.begin(), candidates.end(), [](const candidate & a, const candidate & b) {
+        return a.priority > b.priority;
+    });
+    for (const auto & entry : candidates) {
+        if (keep.size() + entry.rows.size() <= budget) {
+            keep.insert(keep.end(), entry.rows.begin(), entry.rows.end());
+        }
+    }
+    std::sort(keep.begin(), keep.end());
+
+    struct row_run {
+        uint32_t source;
+        uint32_t destination;
+        uint32_t count;
+    };
+    std::vector<row_run> runs;
+    for (uint32_t i = 0; i < keep.size();) {
+        uint32_t end = i + 1;
+        while (end < keep.size() && keep[end] == keep[end - 1] + 1) {
+            ++end;
+        }
+        runs.push_back({keep[i], i, end - i});
+        i = end;
+    }
+
+    const uint32_t old_size = get_size();
+    const uint32_t new_size = std::min<uint64_t>(old_size, GGML_PAD(uint64_t(budget) + triattention_interval + 256, 256));
+    auto replacement = make_larger_cache(new_size);
+    replacement->v_cells[0].set(0, cells.cp(keep));
+    replacement->v_heads[0] = keep.size();
+    before_resize();
+
+    // Copy contiguous runs of retained rows in their original storage format.
+    std::vector<ggml_tensor> src_runs(runs.size()), dst_runs(runs.size());
+    std::vector<const ggml_tensor *> sources;
+    std::vector<ggml_tensor *> destinations;
+    for (size_t i = 0; i < runs.size(); ++i) {
+        sources.push_back(&src_runs[i]);
+        destinations.push_back(&dst_runs[i]);
+    }
+    for (size_t layer = 0; layer < layers.size(); ++layer) {
+        for (int value = 0; value < 2; ++value) {
+            const auto * src = value ? layers[layer].v : layers[layer].k;
+            const auto * dst = value ? replacement->layers[layer].v : replacement->layers[layer].k;
+            GGML_ASSERT(src->ne[0] == dst->ne[0] && src->nb[1] == dst->nb[1]);
+            for (size_t i = 0; i < runs.size(); ++i) {
+                const auto & run = runs[i];
+                auto & src_rows = src_runs[i];
+                auto & dst_rows = dst_runs[i];
+                src_rows = *src;
+                dst_rows = *dst;
+                src_rows.data = static_cast<char *>(src->data) + run.source * src->nb[1];
+                dst_rows.data = static_cast<char *>(dst->data) + run.destination * dst->nb[1];
+                src_rows.ne[1] = dst_rows.ne[1] = run.count;
+                src_rows.nb[2] = src_rows.nb[3] = dst_rows.nb[2] = dst_rows.nb[3] = run.count * src->nb[1];
+            }
+            ggml_backend_tensor_copy_n(sources.data(), destinations.data(), sources.size());
+        }
+    }
+    const uint32_t old_used = cells.get_used();
+    replace_storage(*replacement);
+    replacement.reset();
+    LLAMA_LOG_INFO("%s: retained %zu/%u target KV rows, capacity %u -> %u cells in %.2f ms\n",
+            __func__, keep.size(), old_used, old_size, new_size, (ggml_time_us() - started) / 1000.0);
+    return true;
 }
 
 void llama_kv_cache::state_read_sinfo(

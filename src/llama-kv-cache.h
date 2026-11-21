@@ -162,6 +162,9 @@ public:
 
     void set_before_resize(std::function<void()> before_resize);
     bool ensure_batch_capacity(uint32_t n_tokens);
+    bool triattention_needs_prune(uint32_t budget, bool after_prefill) const;
+    bool triattention_prune(uint32_t budget, const llama_cparams & cparams, int il,
+            const ggml_tensor * query, bool previous_generation);
     uint32_t get_n_seq_max() const;
     uint32_t get_n_stream() const;
 
@@ -351,6 +354,7 @@ private:
     std::function<void()> before_resize;
 
     void ensure_capacity(uint32_t required);
+    void replace_storage(llama_kv_cache & replacement);
 
     size_t total_size() const;
 

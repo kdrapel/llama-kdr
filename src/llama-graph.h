@@ -906,6 +906,7 @@ struct llm_graph_params {
             cparams.embeddings_nextn        == other.cparams.embeddings_nextn        &&
             cparams.embeddings_nextn_masked == other.cparams.embeddings_nextn_masked &&
             cparams.causal_attn             == other.cparams.causal_attn             &&
+            cparams.triattention_capture    == other.cparams.triattention_capture    &&
             layer_inp_dev == other.layer_inp_dev &&
             layer_inp_src == other.layer_inp_src &&
             h_nextn_dev   == other.h_nextn_dev   &&
@@ -973,6 +974,8 @@ public:
     ggml_tensor * t_inp_tokens  = nullptr;
     ggml_tensor * t_inp_embd    = nullptr; // [n_embd_inp, n_tokens]
     ggml_tensor * t_logits      = nullptr;
+    ggml_tensor * t_triattention_q = nullptr;
+    int triattention_layer = -1;
     ggml_tensor * t_embd        = nullptr;
     ggml_tensor * t_embd_pooled = nullptr;
     ggml_tensor * t_h_nextn     = nullptr; // [n_embd, n_outputs] hidden state before final output norm

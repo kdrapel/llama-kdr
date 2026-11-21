@@ -48,6 +48,7 @@ struct llama_cparams {
     bool fused_top_k_mask;   // use fused top-k sparse attention mask
     bool auto_ftkm;
     bool fused_kv_rows;      // unified cache: attend to the cells of each sequence only (ggml_flash_attn_ext_rows)
+    bool triattention_capture = false;
     bool auto_fkvr;
     bool no_perf;
     bool op_offload;

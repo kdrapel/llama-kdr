@@ -16,6 +16,7 @@
 #include "common.h"
 #include "fit.h"
 #include "llama.h"
+#include "src/llama-ext.h"
 #include "log.h"
 #include "sampling.h"
 #include "speculative.h"
@@ -412,6 +413,7 @@ struct server_slot {
 
     server_slot_stats stats;
     bool dflash_delayed_prefill = false;
+    bool triattention_pruned = false;
 
     // accepted tokens per draft position
     // not in server_slot_stats to avoid copying to every task result
@@ -429,6 +431,7 @@ struct server_slot {
 
         spec_is_replay = false;
         dflash_delayed_prefill = false;
+        triattention_pruned = false;
 
         last_nl_pos    = 0;
         generated      = {};
@@ -672,7 +675,8 @@ struct server_slot {
             // do not keep context of the child slots - the parent's context is enough
             // nor of the stateless slots - no task ever reuses it
             // Delayed DFlash prefill omits the draft KV for the early prompt.
-            if (dflash_delayed_prefill || task->is_child() || task->is_stateless() || audio_stream || task->type == SERVER_TASK_TYPE_REALTIME) {
+            if (triattention_pruned || dflash_delayed_prefill || task->is_child() ||
+                    task->is_stateless() || audio_stream || task->type == SERVER_TASK_TYPE_REALTIME) {
                 prompt_clear();
             }
 
@@ -1100,6 +1104,15 @@ private:
     const bool profile_prefill = [] {
         const char * value = std::getenv("LLAMA_PROFILE_PREFILL");
         return value && std::string_view(value) == "1";
+    }();
+    const uint32_t triattention_budget = [] {
+        const char * value = std::getenv("LLAMA_TRIATTENTION_BUDGET");
+        if (!value) {
+            return uint32_t(0);
+        }
+        char * end = nullptr;
+        const auto budget = std::strtoull(value, &end, 10);
+        return *end == '\0' && budget >= 4096 && budget <= 131072 ? uint32_t(budget) : uint32_t(0);
     }();
 
     bool set_dflash_capture_paused(bool paused) {
@@ -4804,6 +4817,16 @@ private:
         int ret = 0;
         queue_tasks.yield_to_queue([&]() {
             const int64_t start_us = measure ? ggml_time_us() : 0;
+            if (triattention_budget && slots.size() == 1) {
+                auto & slot = slots.front();
+                const bool eligible = slot.task && slot.task->type == SERVER_TASK_TYPE_COMPLETION &&
+                        !slot.task->params.cache_prompt && !slot.task->is_parent() && !slot.task->is_child() &&
+                        !slot.prompt.tokens.has_mtmd && !slot.truncated &&
+                        (ctx_tgt_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_PART ||
+                         ctx_tgt_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_RS);
+                slot.triattention_pruned |= llama_triattention_prepare(ctx_tgt,
+                        eligible ? triattention_budget : 0, !batch.tokens[off].is_prompt);
+            }
             ret = llama_process(ctx_tgt, LLAMA_PROCESS_TYPE_DECODE, batch.view.get());
             if (ret == 0 && (has_output || measure)) {
                 llama_synchronize(ctx_tgt);

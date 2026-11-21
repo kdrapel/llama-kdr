@@ -1710,6 +1710,41 @@ void llama_context::set_causal_attn(bool value) {
     cparams.causal_attn = value;
 }
 
+bool llama_context::triattention_prepare(uint32_t budget, bool generation) {
+    const bool had_capture = cparams.triattention_capture;
+    const bool previous_generation = triattention_previous_generation;
+    cparams.triattention_capture = budget >= 4096 && budget < cparams.n_ctx_seq &&
+            model.arch == LLM_ARCH_QWEN35 && cparams.ctx_type == LLAMA_CONTEXT_TYPE_DEFAULT &&
+            cparams.flash_attn && cparams.causal_attn && cparams.n_seq_max == 1 && !cparams.kv_unified &&
+            !cparams.pipeline_parallel && cparams.offload_kqv && !model.no_alloc();
+    triattention_previous_generation = cparams.triattention_capture && generation;
+    if (!triattention_previous_generation) {
+        triattention_retry_pos = -1;
+        return false;
+    }
+    if (!had_capture || !gf_res_prev_active || !gf_res_prev_active->t_triattention_q) {
+        return false;
+    }
+    auto * hybrid = dynamic_cast<llama_memory_hybrid *>(memory.get());
+    if (!hybrid) {
+        return false;
+    }
+    auto * cache = hybrid->get_mem_attn();
+    const int64_t latest = cache->seq_pos_max(0);
+    if (latest < triattention_retry_pos || !cache->triattention_needs_prune(budget, !previous_generation)) {
+        return false;
+    }
+    triattention_retry_pos = latest + 256;
+    ggml_backend_sched_synchronize(sched.get());
+    auto * res = gf_res_prev_active;
+    try {
+        return cache->triattention_prune(budget, cparams, res->triattention_layer, res->t_triattention_q, previous_generation);
+    } catch (const std::exception & err) {
+        LLAMA_LOG_WARN("%s: could not compact target KV: %s\n", __func__, err.what());
+        return false;
+    }
+}
+
 bool llama_context::get_causal_attn() const {
     return cparams.causal_attn;
 }
@@ -4705,6 +4740,10 @@ void llama_set_causal_attn(llama_context * ctx, bool causal_attn) {
 
 bool llama_get_causal_attn(const llama_context * ctx) {
     return ctx->get_causal_attn();
+}
+
+bool llama_triattention_prepare(llama_context * ctx, uint32_t budget, bool generation) {
+    return ctx->triattention_prepare(budget, generation);
 }
 
 void llama_synchronize(llama_context * ctx) {
