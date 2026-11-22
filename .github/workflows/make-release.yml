@@ -19,10 +19,10 @@ on:
         type: boolean
         default: false
       require_docker:
-        description: 'Require the Docker workflow to have completed successfully'
+        description: 'Require published container images (no image publishing workflow exists in this fork)'
         required: true
         type: boolean
-        default: true
+        default: false
       apiabi_compare_tag:
         description: 'Tag to compare against for API/ABI check (default: latest release)'
         required: false
