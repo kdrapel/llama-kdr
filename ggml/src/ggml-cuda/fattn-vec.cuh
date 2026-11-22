@@ -679,12 +679,14 @@ static void ggml_cuda_flash_attn_ext_vec_case_dispatch(ggml_backend_cuda_context
 template <int D, ggml_type type_K, ggml_type type_V>
 void ggml_cuda_flash_attn_ext_vec_case(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {
     const ggml_tensor * KQV = dst;
-    const ggml_tensor * Q   = dst->src[0];
 
     float logit_softcap;
     memcpy(&logit_softcap, (const float *) KQV->op_params + 2, sizeof(float));
 
+    // Grouping heads needs nthreads_KQ <= QI8_1, which only the HIP build satisfies.
+#ifdef GGML_USE_HIP
     if constexpr (D == 256 && type_K == GGML_TYPE_Q4_0 && type_V == GGML_TYPE_Q4_0) {
+        const ggml_tensor * Q = dst->src[0];
         const int cc = ggml_cuda_info().devices[ggml_cuda_get_device()].cc;
         const int gqa_ratio = Q->ne[2] / dst->src[1]->ne[2];
         if (GGML_CUDA_CC_IS_RDNA4(cc) && gqa_ratio >= 2 && gqa_ratio % 2 == 0) {
@@ -694,6 +696,7 @@ void ggml_cuda_flash_attn_ext_vec_case(ggml_backend_cuda_context & ctx, ggml_ten
             return;
         }
     }
+#endif // GGML_USE_HIP
 
     ggml_cuda_flash_attn_ext_vec_case_dispatch<D, 1, type_K, type_V>(ctx, dst, logit_softcap);
 }
